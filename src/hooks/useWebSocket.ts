@@ -6,13 +6,11 @@ type MessageHandler = (data: any) => void;
 class WebSocketManager {
   private ws: WebSocket | null = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
-  private reconnectAttempts = 0;
   private shouldReconnect = true;
   private messageHandlers = new Map<string, Set<MessageHandler>>();
   private connectionListeners = new Set<(isConnected: boolean) => void>();
   private isConnected = false;
 
-  private readonly MAX_RECONNECT_ATTEMPTS = 10;
   private readonly RECONNECT_INTERVAL = 3000;
 
   constructor() {
@@ -37,7 +35,6 @@ class WebSocketManager {
     ws.onopen = () => {
       console.log('WebSocket connected');
       this.isConnected = true;
-      this.reconnectAttempts = 0;
       this.notifyConnectionListeners();
     };
 
@@ -65,15 +62,11 @@ class WebSocketManager {
       this.isConnected = false;
       this.notifyConnectionListeners();
 
-      if (this.shouldReconnect && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
-        this.reconnectAttempts++;
-        console.log(`Reconnecting... Attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}`);
+      if (this.shouldReconnect) {
         
         this.reconnectTimeout = setTimeout(() => {
           this.connect();
         }, this.RECONNECT_INTERVAL);
-      } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-        console.error('Max reconnect attempts reached');
       }
     };
   }
