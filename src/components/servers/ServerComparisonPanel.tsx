@@ -412,16 +412,18 @@ export default function ServerComparisonPanel({
       ]
     : [];
 
-  const selectedDonutData: DonutDatum[] = selectedIps.map((ip, index) => {
-    const stats = statsLookup.get(ip);
-    const server = serverLookup.get(ip);
-    const fallbackColor = DONUT_PALETTE[index % DONUT_PALETTE.length];
-    return {
-      label: server?.name ?? ip,
-      value: stats?.current ?? server?.player_count ?? 0,
-      color: seriesColorByIp.get(ip)?.color ?? fallbackColor,
-    };
-  });
+  const selectedDonutData: DonutDatum[] = selectedIps
+    .map((ip, index) => {
+      const stats = statsLookup.get(ip);
+      const server = serverLookup.get(ip);
+      const fallbackColor = DONUT_PALETTE[index % DONUT_PALETTE.length];
+      return {
+        label: server?.name ?? ip,
+        value: stats?.current ?? server?.player_count ?? 0,
+        color: seriesColorByIp.get(ip)?.color ?? fallbackColor,
+      };
+    })
+    .sort((a, b) => b.value - a.value);
 
   const toggleServer = useCallback(
     (ip: string) => {
