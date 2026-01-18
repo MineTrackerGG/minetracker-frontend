@@ -11,7 +11,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
 FROM base AS builder
-ENV NODE_ENV=development
+ENV NODE_ENV=production
 COPY --from=deps-dev /app/node_modules ./node_modules
 COPY . .
 RUN bun run build
