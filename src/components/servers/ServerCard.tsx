@@ -199,17 +199,6 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
               <CardDescription className="truncate">{server.ip}</CardDescription>
             </div>
           </div>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" onClick={() => {router.push(`/server/${encodeURIComponent(server.ip)}`)}}>
-                    <ArrowUpRight size={16} />
-                </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-                <p>View server page</p>
-            </TooltipContent>
-          </Tooltip>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
