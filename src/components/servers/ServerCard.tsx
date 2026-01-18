@@ -28,6 +28,8 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
 
   const maxDataPointsRef = useRef(1000);
   const bufferRef = useRef<ServerDataPoint[]>([]);
+  const xAxisRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const statsRef = useRef({
     current: 0,
@@ -37,6 +39,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   });
 
   const [, forceUpdate] = useState(0);
+  const { ref, visible } = useVisible<HTMLDivElement>();
 
   useEffect(() => {
     const handleDataPointAdd = (data: any) => {
@@ -90,6 +93,18 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   }, []);
 
   useEffect(() => {
+    const updateWidth = () => {
+      if (xAxisRef.current) {
+        setContainerWidth(xAxisRef.current.clientWidth);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [visible]);
+
+  useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -126,7 +141,6 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const sparklinePoints = useSparklineData(dataPoints, 50);
   const sparklineValues = sparklinePoints.map((point) => point.player_count);
   const sparklineTimestamps = sparklinePoints.map((point) => Number(point.timestamp));
-  const { ref, visible } = useVisible<HTMLDivElement>();
 
   const { yRange, yTicks } = useMemo(() => {
     if (sparklineValues.length < 2) {
@@ -165,16 +179,32 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
     const end = Number(dataPoints.at(-1)?.timestamp) * 1000;
     if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
     if (start === end) return [start];
-    const divisions = 4;
+    
+    // Berechne dynamisch wie viele Labels basierend auf Container-Breite
+    const width = containerWidth || 300;
+    const minLabelWidth = width < 400 ? 80 : 100;
+    const maxLabels = Math.max(2, Math.min(5, Math.floor(width / minLabelWidth)));
+    const divisions = maxLabels - 1;
+    
     const interval = (end - start) / divisions;
     return Array.from({ length: divisions + 1 }, (_, idx) =>
       Math.round(start + interval * idx),
     );
-  }, [dataPoints]);
+  }, [dataPoints, containerWidth]);
 
-  const formatTickLabel = useCallback((timestamp: number) => {
+  const formatTickLabel = useCallback((timestamp: number, isSmall: boolean) => {
     if (!timestamp) return "--";
-    return new Date(timestamp).toLocaleString(undefined, {
+    const date = new Date(timestamp);
+    
+    if (isSmall) {
+      // Nur Uhrzeit für kleine Bildschirme
+      return date.toLocaleString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+    
+    return date.toLocaleString(undefined, {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -228,9 +258,9 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
                 </div>
               </div>
 
-              <div className="ml-16 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div ref={xAxisRef} className="ml-16 flex justify-between text-xs text-muted-foreground whitespace-nowrap overflow-hidden">
                 {xTicks.map((tick, idx) => (
-                  <span key={`${idx}-${tick}`}>{formatTickLabel(tick)}</span>
+                  <span key={`${idx}-${tick}`} className="shrink-0">{formatTickLabel(tick, containerWidth < 400)}</span>
                 ))}
               </div>
             </div>
