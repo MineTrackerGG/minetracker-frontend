@@ -14,7 +14,6 @@ import React from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
-import { useRouter } from "next/navigation";
 
 interface ServerCardProps {
   server: Server;
@@ -26,8 +25,6 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const [loading, setLoading] = useState(true);
 
   const { isConnected, on, off } = useWebSocket();
-
-  const router = useRouter();
 
   const maxDataPointsRef = useRef(1000);
   const bufferRef = useRef<ServerDataPoint[]>([]);
