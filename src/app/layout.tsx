@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     siteName: "MineTracker — Minecraft Server Tracker",
     images: [
       {
-        url: "/logo/256x.png",
+        url: "/logo/x256.png",
         width: 256,
         height: 256,
         alt: "MineTracker Logo"
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "MineTracker – Minecraft Server Tracker",
     description: "MineTracker is a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker.",
-    images: ["/logo/256x.png"],
+    images: ["/logo/x256.png"],
   },
   robots: {
     index: true,
