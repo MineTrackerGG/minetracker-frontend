@@ -4,7 +4,7 @@ export async function getDataPoints(server: string, duration: string) : Promise<
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/${server}/${duration}`);
 
     if (!response.ok) {
-        throw new Error('Failed to fetch server data points: ' + response.statusText);
+        return { data: {} } as ServerDataQuery;
     }
 
     const data = await response.json();
@@ -24,7 +24,7 @@ export async function getBulkServerData(servers: string[], duration: string): Pr
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bulk/${joinedServers}/${duration}`);
 
     if (!response.ok) {
-        throw new Error('Failed to fetch bulk server data points: ' + response.statusText);
+        return { data: {} };
     }
 
     const data = await response.json();

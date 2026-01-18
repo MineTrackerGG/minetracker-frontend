@@ -20,6 +20,10 @@ export default function Home() {
   const selectionInitializedRef = useRef(false);
   const prevServerCountRef = useRef(0);
 
+  const globalPlayercount = useMemo(() => {
+    return servers.reduce((acc, server) => acc + server.player_count, 0);
+  }, [servers]);
+
   useEffect(() => {
     const handleServersUpdate = (data: { servers: Server[] }) => {
       if (data.servers) {
@@ -27,10 +31,43 @@ export default function Home() {
       }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleDataPointAdd = (data: any) => {
+      const serverData = data?.data;
+      if (!serverData) return;
+
+      const isValidCount =
+        typeof serverData.player_count === "number" &&
+        Number.isFinite(serverData.player_count) &&
+        serverData.player_count >= 0 &&
+        serverData.player_count <= 100000;
+
+      if (!isValidCount || typeof serverData.ip !== "string") return;
+
+      setServers((prev) => {
+        if (prev.length === 0) return prev; // 🔑 WICHTIG
+
+        let changed = false;
+
+        const next = prev.map((server) => {
+          if (server.ip !== serverData.ip) return server;
+
+          if (server.player_count === serverData.player_count) return server;
+
+          changed = true;
+          return { ...server, player_count: serverData.player_count };
+        });
+
+        return changed ? next : prev;
+      });
+    };
+
     on("servers_update", handleServersUpdate);
+    on("data_point_add", handleDataPointAdd);
 
     return () => {
       off("servers_update", handleServersUpdate);
+      off("data_point_add", handleDataPointAdd);
     };
   }, [on, off]);
 
@@ -50,11 +87,6 @@ export default function Home() {
       }
     });
   }, [servers, sortOption]);
-
-  const totalPlayers = useMemo(
-    () => servers.reduce((acc, server) => acc + server.player_count, 0),
-    [servers],
-  );
 
   useEffect(() => {
     if (servers.length === 0) {
@@ -129,7 +161,7 @@ export default function Home() {
               <h1 className="text-3xl font-semibold text-white">Multi-server overview</h1>
               <p className="text-sm text-white/60">
                 {servers.length
-                  ? `${servers.length.toLocaleString()} servers live • ${totalPlayers.toLocaleString()} players online`
+                  ? `${servers.length.toLocaleString()} servers live • ${globalPlayercount.toLocaleString()} players online`
                   : "Waiting for live data"}
               </p>
             </div>
@@ -154,7 +186,7 @@ export default function Home() {
       ) : (
         <>
           <div className="mb-6">
-            <ServerHeader servers={servers.length} totalPlayers={totalPlayers} />
+            <ServerHeader servers={servers.length} totalPlayers={globalPlayercount} />
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
               <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
               <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />
