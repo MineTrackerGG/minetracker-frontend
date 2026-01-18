@@ -120,18 +120,41 @@ export function Sparkline({
   }, [values, height, hoverIndex, canvasWidth, yRange]);
 
     const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (values.length === 0) {
+      setHoverIndex(null);
+      return;
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
     const index = Math.round(
-        (x / rect.width) * (values.length - 1)
+      (x / rect.width) * (values.length - 1)
     );
 
     setHoverIndex(Math.max(0, Math.min(values.length - 1, index)));
     setHoverX(x);
     setHoverY(y);
     };
+
+    const showTooltip =
+    hoverIndex !== null &&
+    hoverIndex >= 0 &&
+    hoverIndex < values.length &&
+    typeof values[hoverIndex] === "number";
+
+    const hoveredValue = showTooltip ? values[hoverIndex] : undefined;
+    const hoveredTimestamp =
+    showTooltip && hoverIndex < timestamps.length
+      ? timestamps[hoverIndex]
+      : undefined;
+    const tooltipValueLabel =
+    typeof hoveredValue === "number" ? hoveredValue.toLocaleString() : "--";
+    const tooltipTimestampLabel =
+    typeof hoveredTimestamp === "number"
+      ? new Date(hoveredTimestamp * 1000).toLocaleString()
+      : "--";
 
   return (
     <div className="relative">
@@ -143,7 +166,7 @@ export function Sparkline({
         onMouseLeave={() => setHoverIndex(null)}
       />
 
-        {hoverIndex !== null && (
+        {showTooltip && (
         <div
             className="pointer-events-none absolute z-10 bg-background border rounded-md px-2 py-1 text-xs shadow"
             style={{
@@ -152,10 +175,10 @@ export function Sparkline({
             }}
         >
             <div className="font-medium">
-            {values[hoverIndex].toLocaleString()} Players
+          {tooltipValueLabel} Players
             </div>
             <div className="text-muted-foreground">
-            {new Date(timestamps[hoverIndex] * 1000).toLocaleString()}
+          {tooltipTimestampLabel}
             </div>
         </div>
         )}

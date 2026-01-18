@@ -43,6 +43,15 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
       const serverData = data?.data;
       if (!serverData || serverData.ip !== server.ip) return;
 
+      const isValidCount =
+        typeof serverData.player_count === "number" &&
+        Number.isFinite(serverData.player_count) &&
+        serverData.player_count >= 0 &&
+        serverData.player_count <= 100000;
+      const hasTimestamp = serverData.timestamp != null;
+
+      if (!isValidCount || !hasTimestamp) return;
+
       bufferRef.current.push(serverData);
     };
 
