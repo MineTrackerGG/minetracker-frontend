@@ -4,14 +4,7 @@
 
 import { getDataPoints } from "@/lib/serverData";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardTitle } from "../ui/card";
 import { Server, ServerDataPoint } from "@/types/server";
 import Image from "next/image";
 import { Skeleton } from "../ui/skeleton";
@@ -182,89 +175,85 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
 
   return (
     <Card className="w-full max-w-2xl">
-      <CardHeader className="flex flex-row items-center gap-4 pb-4">
-        <div className="relative w-16 h-16 shrink-0">
-          <Image
-            src={iconSrc}
-            alt={`${server.ip} icon`}
-            width={64}
-            height={64}
-            className="rounded-lg"
-            unoptimized
-          />
+      <CardContent ref={ref} className="space-y-6 pb-4 pt-6">
+        <div className="flex flex-col gap-6 md:flex-row md:items-center">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="relative h-16 w-16 shrink-0">
+              <Image
+                src={iconSrc}
+                alt={`${server.ip} icon`}
+                width={64}
+                height={64}
+                className="rounded-2xl border border-white/10 bg-black/40"
+                unoptimized
+              />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="truncate text-xl leading-tight">{server.name || server.ip}</CardTitle>
+              <CardDescription className="truncate">{server.ip}</CardDescription>
+            </div>
+          </div>
         </div>
-        <div className="flex-1">
-          <CardTitle className="text-xl">{server.name || server.ip}</CardTitle>
-          <CardDescription>{server.ip}</CardDescription>
-        </div>
-      </CardHeader>
 
-      <CardContent ref={ref} className="pb-4">
-        {loading || !isConnected || !visible ? (
-          <Skeleton className="h-20 w-full" />
-        ) : (
-          <div className="relative pl-10">
-            <div className="relative pl-16">
-              <div className="absolute left-0 top-0 bottom-4 w-16 pr-2 flex flex-col justify-between text-xs text-muted-foreground text-right">
-                {yTicks.map((value, idx) => (
-                  <span key={`${idx}-${value}`}>{value.toLocaleString()}</span>
-                ))}
+        <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
+          {loading || !isConnected || !visible ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <div className="relative flex flex-col gap-3">
+              <div className="relative flex-1">
+                <div className="absolute left-0 top-0 bottom-3 flex flex-col justify-between pr-3 text-xs text-muted-foreground text-right">
+                  {yTicks.map((value, idx) => (
+                    <span key={`${idx}-${value}`}>{value.toLocaleString()}</span>
+                  ))}
+                </div>
+
+                <div className="ml-16">
+                  <Sparkline
+                    values={sparklineValues}
+                    timestamps={dataPoints
+                      .slice(-sparklineValues.length)
+                      .map((d) => Number(d.timestamp))}
+                    height={150}
+                    yRange={yRange}
+                  />
+                </div>
               </div>
 
-              <Sparkline
-                values={sparklineValues}
-                timestamps={dataPoints
-                  .slice(-sparklineValues.length)
-                  .map((d) => Number(d.timestamp))}
-                height={110}
-                yRange={yRange}
-              />
-
-              <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div className="ml-16 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {xTicks.map((tick, idx) => (
                   <span key={`${idx}-${tick}`}>{formatTickLabel(tick)}</span>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
 
-      <CardFooter className="border-t pt-4">
-        <div className="grid grid-cols-3 gap-4 w-full text-center">
-          {[
-            { label: "Current", value: stats.current },
-            { label: "Mean", value: stats.avg },
-            { label: "Max", value: stats.max },
-          ].map((s) => (
-            <div key={s.label}>
-              {s.label === "Current" && (
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span className="text-xs text-muted-foreground">Current</span>
+      <CardFooter className="border-t border-white/5 pt-4">
+        <div className="grid w-full gap-4 text-center text-xs text-muted-foreground md:grid-cols-3">
+          {["Current", "Mean", "Max"].map((label) => {
+            const value =
+              label === "Current" ? stats.current : label === "Mean" ? stats.avg : stats.max;
+            const colorClass =
+              label === "Current"
+                ? "bg-green-500"
+                : label === "Mean"
+                  ? "bg-blue-500"
+                  : "bg-red-500";
+            return (
+              <div key={label} className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${colorClass}`} aria-hidden />
+                  <span>{label}</span>
                 </div>
-              )}
-              {s.label === "Mean" && (
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                  <span className="text-xs text-muted-foreground">Mean</span>
-                </div>
-              )}
-              {s.label === "Max" && (
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                  <span className="text-xs text-muted-foreground">Max</span>
-                </div>
-              )}
-              {loading ? (
-                <Skeleton className="h-8 w-16 mx-auto mt-1" />
-              ) : (
-                <div className="text-2xl font-bold">
-                  {s.value.toLocaleString()}
-                </div>
-              )}
-            </div>
-          ))}
+                {loading ? (
+                  <Skeleton className="h-7 w-16" />
+                ) : (
+                  <span className="text-2xl font-semibold text-white">{value.toLocaleString()}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </CardFooter>
     </Card>

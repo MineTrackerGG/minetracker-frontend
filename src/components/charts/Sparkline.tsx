@@ -75,7 +75,7 @@ export function Sparkline({
         fill: "rgba(34,197,94,0.18)",
     },
     down: {
-        stroke: "rgb(59 130 246)",      // blue-500
+        stroke: "rgb(59 130 246)",      // red-400
         fill: "rgba(59,130,246,0.18)",
     },
     flat: {
