@@ -29,7 +29,8 @@ export default function Home() {
 
   return (
     <div className="bg-black min-h-screen p-8">
-      {!isConnected && <LoadingScreen message="Connecting to backend..." />}
+      {(!isConnected) && <LoadingScreen message="Connecting to backend..." />}
+      {!servers.length && isConnected && <LoadingScreen message={`Loading server data...`} />}
 
       <div className="mb-6">
         <ServerHeader servers={servers.length} totalPlayers={servers.reduce((acc, server) => acc + server.player_count, 0)} />
