@@ -70,6 +70,9 @@ function DonutCard({
   const pieData = hasData ? chartData : [{ label: "No data", value: 1, color: "#27272a" }];
   const legendData = colored.length ? colored : pieData;
 
+  // Base for percentage calculation (matches the pie rendering)
+  const percentBase = pieData.reduce((sum, entry) => sum + entry.value, 0);
+
   return (
     <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
       <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/60">
@@ -98,15 +101,21 @@ function DonutCard({
         </div>
       </div>
       <div className="mt-3 space-y-1.5 text-xs text-white/70">
-        {legendData.map((entry, index) => (
-          <div key={`${entry.label}-meta-${index}`} className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
-              {entry.label}
-            </span>
-            <span className="font-medium text-white">{formatNumber(entry.value)}</span>
-          </div>
-        ))}
+        {legendData.map((entry, index) => {
+          const pct = percentBase > 0 ? (entry.value / percentBase) * 100 : 0;
+          return (
+            <div key={`${entry.label}-meta-${index}`} className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                {entry.label}
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="font-medium text-white">{formatNumber(entry.value)}</span>
+                <span className="text-white/60">{pct.toLocaleString(undefined, { maximumFractionDigits: 1 })}%</span>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
