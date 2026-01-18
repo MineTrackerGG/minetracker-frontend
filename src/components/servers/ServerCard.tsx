@@ -14,9 +14,6 @@ import React from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
-import { Button } from "../ui/button";
-import { ArrowUpRight } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useRouter } from "next/navigation";
 
 interface ServerCardProps {
