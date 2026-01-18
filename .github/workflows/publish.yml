@@ -1,0 +1,145 @@
+name: Build, Release & Publish to ghcr
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  push:
+    branches:
+      - release
+      - main
+
+jobs:
+  build_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all Git tags
+        run: git fetch --tags
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run lint
+        run: bun run lint
+
+      - name: Check for new commits since last tag
+        if: github.ref == 'refs/heads/release'
+        id: check_commits
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "no_last_tag=true" >> $GITHUB_OUTPUT
+            echo "no_new_commits=false" >> $GITHUB_OUTPUT
+          else
+            NEW_COMMITS=$(git log ${LAST_TAG}..HEAD --oneline)
+            echo "no_new_commits=$([ -z "$NEW_COMMITS" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get next version
+        if: github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true'
+        id: version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_branches: release
+          tag_prefix: "v"
+          custom_release_rules: |
+            major:major:Breaking Changes
+            minor:minor:Features
+            patch:patch:Bug Fixes or other non-feature changes
+
+      - name: Generate changelog
+        if: github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true'
+        id: changelog
+        run: |
+          PREV_TAG=${{ steps.check_commits.outputs.last_tag }}
+          LOG_RANGE="HEAD"
+          if [ -n "$PREV_TAG" ]; then
+            LOG_RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          {
+            echo "# What's Changed"
+            echo ""
+            git log ${LOG_RANGE} --pretty=format:"%H|%s" | while IFS="|" read -r COMMIT_HASH MESSAGE; do
+              AUTHOR_LOGIN=$(gh api repos/${{ github.repository }}/commits/$COMMIT_HASH --jq '.author.login // empty' 2>/dev/null || echo "")
+              SHORT_HASH=${COMMIT_HASH:0:7}
+
+              if [[ "$AUTHOR_LOGIN" == *"bot"* ]] || [[ -z "$AUTHOR_LOGIN" ]]; then
+                AUTHOR_NAME=$(gh api repos/${{ github.repository }}/commits/$COMMIT_HASH --jq '.commit.author.name // empty' 2>/dev/null || echo "Unknown")
+                echo "- $MESSAGE ([$SHORT_HASH](https://github.com/${{ github.repository }}/commit/$COMMIT_HASH)) by $AUTHOR_NAME"
+              else
+                echo "- $MESSAGE ([$SHORT_HASH](https://github.com/${{ github.repository }}/commit/$COMMIT_HASH)) by @$AUTHOR_LOGIN"
+              fi
+            done
+          } > RELEASE_NOTES.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: "MineTracker-Frontend | ${{ steps.version.outputs.new_tag }}"
+          body_path: RELEASE_NOTES.md
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/minetracker-frontend
+          tags: |
+            type=raw,value=${{ steps.version.outputs.new_tag }}+{{sha}},enable=${{ github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true' }}
+            type=raw,value=dev-{{sha}},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker image
+        if: steps.meta.outputs.tags != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ (github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+            NEXT_TELEMETRY_DISABLED=1
