@@ -123,7 +123,9 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
     fetchData();
   }, [server.ip, timeRange]);
 
-  const sparklineValues = useSparklineData(dataPoints, 50);
+  const sparklinePoints = useSparklineData(dataPoints, 50);
+  const sparklineValues = sparklinePoints.map((point) => point.player_count);
+  const sparklineTimestamps = sparklinePoints.map((point) => Number(point.timestamp));
   const { ref, visible } = useVisible<HTMLDivElement>();
 
   const { yRange, yTicks } = useMemo(() => {
@@ -219,9 +221,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
                 <div className="ml-16">
                   <Sparkline
                     values={sparklineValues}
-                    timestamps={dataPoints
-                      .slice(-sparklineValues.length)
-                      .map((d) => Number(d.timestamp))}
+                    timestamps={sparklineTimestamps}
                     height={150}
                     yRange={yRange}
                   />
