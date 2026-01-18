@@ -1,7 +1,7 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
 import { Server, ServerDataPoint } from "@/types/server";
 import { getBulkServerData } from "@/lib/serverData";
@@ -14,10 +14,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Pie,
+  PieChart,
+  Cell,
 } from "recharts";
 
 const MAX_POINTS = 240;
 const LINE_PALETTE = ["#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ef4444", "#14b8a6"];
+const DONUT_PALETTE = ["#a855f7", "#22c55e", "#0ea5e9", "#f97316", "#eab308", "#ec4899"];
 
 type ComparisonData = Record<string, ServerDataPoint[]>;
 
@@ -40,6 +44,73 @@ const sanitizePoints = (points: ServerDataPoint[]) =>
     .sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
 
 const safeSeriesKey = (ip: string) => `series_${ip.replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+const formatNumber = (value: number) => value.toLocaleString();
+
+type DonutDatum = { label: string; value: number; color?: string };
+
+function DonutCard({
+  title,
+  description,
+  data,
+  total,
+}: {
+  title: string;
+  description: string;
+  data: DonutDatum[];
+  total: number;
+}) {
+  const colored = data.map((entry, index) => ({
+    ...entry,
+    value: Math.max(entry.value, 0),
+    color: entry.color ?? DONUT_PALETTE[index % DONUT_PALETTE.length],
+  }));
+  const chartData = colored.filter((entry) => entry.value > 0);
+  const hasData = chartData.length > 0;
+  const pieData = hasData ? chartData : [{ label: "No data", value: 1, color: "#27272a" }];
+  const legendData = colored.length ? colored : pieData;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/40 p-3">
+      <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/60">
+        <span>{title}</span>
+        <span>{description}</span>
+      </div>
+      <div className="relative mt-3 h-36 w-full">
+        <ResponsiveContainer>
+          <PieChart>
+            <Pie data={pieData} dataKey="value" innerRadius={45} outerRadius={70} stroke="transparent">
+              {pieData.map((entry, index) => (
+                <Cell key={`${entry.label}-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              content={<PieTooltip />}
+              position={{ x: 12, y: 12 }}
+              wrapperStyle={{ pointerEvents: "none", zIndex: 20 }}
+              allowEscapeViewBox={{ x: true, y: true }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">Total</span>
+          <span className="text-xl font-semibold text-white">{formatNumber(total)}</span>
+        </div>
+      </div>
+      <div className="mt-3 space-y-1.5 text-xs text-white/70">
+        {legendData.map((entry, index) => (
+          <div key={`${entry.label}-meta-${index}`} className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
+              {entry.label}
+            </span>
+            <span className="font-medium text-white">{formatNumber(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const downsampleCombined = <T extends { timestamp: number }>(data: T[], maxPoints: number) => {
   if (data.length <= maxPoints) return data;
@@ -101,6 +172,32 @@ function ComparisonTooltip({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function PieTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any[];
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const entry = payload[0];
+  const segment = entry?.payload as DonutDatum | undefined;
+  if (!segment) return null;
+
+  return (
+    <div className="rounded-md border border-white/10 bg-black/80 px-3 py-2 text-xs text-white">
+      <div className="font-medium">{segment.label}</div>
+      <div className="text-sm font-semibold text-white/90">
+        {formatNumber(Number(entry.value ?? 0))} players
       </div>
     </div>
   );
@@ -271,6 +368,52 @@ export default function ServerComparisonPanel({
     });
   }, [comparisonData, seriesMeta]);
 
+  const statsLookup = useMemo(() => {
+    const map = new Map<string, (typeof statsRows)[number]>();
+    statsRows.forEach((row) => map.set(row.ip, row));
+    return map;
+  }, [statsRows]);
+
+  const seriesColorByIp = useMemo(() => {
+    const map = new Map<string, { color: string; label: string }>();
+    seriesMeta.forEach((series) => map.set(series.ip, { color: series.color, label: series.label }));
+    return map;
+  }, [seriesMeta]);
+
+  const selectedSet = useMemo(() => new Set(selectedIps), [selectedIps]);
+
+  const liveTotals = useMemo(() => {
+    return servers.reduce(
+      (acc, server) => {
+        const count = server.player_count ?? 0;
+        acc.total += count;
+        if (selectedSet.has(server.ip)) {
+          acc.selected += count;
+        }
+        return acc;
+      },
+      { total: 0, selected: 0 },
+    );
+  }, [servers, selectedSet]);
+
+  const globalDonutData: DonutDatum[] = liveTotals.total
+    ? [
+        { label: "Selected", value: liveTotals.selected, color: "#a855f7" },
+        { label: "Others", value: Math.max(liveTotals.total - liveTotals.selected, 0), color: "#1f2937" },
+      ]
+    : [];
+
+  const selectedDonutData: DonutDatum[] = selectedIps.map((ip, index) => {
+    const stats = statsLookup.get(ip);
+    const server = serverLookup.get(ip);
+    const fallbackColor = DONUT_PALETTE[index % DONUT_PALETTE.length];
+    return {
+      label: server?.name ?? ip,
+      value: stats?.current ?? server?.player_count ?? 0,
+      color: seriesColorByIp.get(ip)?.color ?? fallbackColor,
+    };
+  });
+
   const toggleServer = useCallback(
     (ip: string) => {
       if (selectedIps.includes(ip)) {
@@ -295,167 +438,200 @@ export default function ServerComparisonPanel({
   const allSelected = totalServers > 0 && selectedCount === totalServers;
   const noneSelected = selectedCount === 0;
 
+  const chartContent = noneSelected ? (
+    <div className="flex h-full items-center justify-center text-sm text-white/60">
+      Select at least one server from the panel on the right.
+    </div>
+  ) : isFetching ? (
+    <Skeleton className="h-full w-full" />
+  ) : (
+    <ResponsiveContainer>
+      <LineChart data={combinedData} margin={{ left: 12, right: 18, top: 12, bottom: 12 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+        <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={["dataMin", "dataMax"]}
+          tickFormatter={(value) => formatTimestamp(Number(value))}
+          stroke="rgba(255,255,255,0.5)"
+          tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 12 }}
+        />
+        <YAxis
+          domain={yDomain as [number, number]}
+          stroke="rgba(255,255,255,0.5)"
+          tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 12 }}
+          width={60}
+          tickFormatter={(value) => Number(value).toLocaleString()}
+        />
+        <Tooltip
+          content={<ComparisonTooltip seriesLookup={seriesLookup} />}
+          cursor={{ stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }}
+        />
+        {seriesMeta.map((series) => (
+          <Line
+            key={series.ip}
+            type="monotone"
+            dataKey={series.dataKey}
+            name={series.label}
+            stroke={series.color}
+            strokeWidth={2}
+            dot={false}
+            isAnimationActive={false}
+            connectNulls
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+  );
+
   return (
-    <Card className="mb-8">
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle className="text-lg">Comparison Mode</CardTitle>
-          <CardDescription>
-            Compare any number of servers across the selected time range.
-          </CardDescription>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {noneSelected ? "No servers selected" : `${selectedCount.toLocaleString()} selected`}
-          {totalServers > 0 ? ` • ${totalServers.toLocaleString()} total` : ""}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <div className="mb-2 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <input
-              type="text"
-              placeholder="Filter servers by name or IP"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-white/40 lg:max-w-sm"
-            />
-            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-white/70">
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                disabled={allSelected}
-                className="rounded-md border border-white/20 px-3 py-1 transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                onClick={handleClearAll}
-                disabled={noneSelected}
-                className="rounded-md border border-white/20 px-3 py-1 transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Clear selection
-              </button>
-            </div>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {noneSelected
-              ? "No servers selected"
-              : `${selectedCount}/${totalServers || 0} selected`}
-            {" "}• {timeRange.toUpperCase()} range
-          </div>
-          <div className="max-h-48 overflow-y-auto pr-2">
-            <div className="flex flex-wrap gap-2">
-              {rankedServers.map((server) => {
-                const selected = selectedIps.includes(server.ip);
-                const stateClasses = selected
-                  ? "bg-white text-black border-white"
-                  : "border-white/30 text-white/70";
-                return (
-                  <button
-                    key={server.ip}
-                    type="button"
-                    onClick={() => toggleServer(server.ip)}
-                    className={`rounded-full border px-3 py-1 text-sm transition ${stateClasses} hover:border-white hover:text-white`}
-                  >
-                    <span>{server.name ?? server.ip}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {server.player_count.toLocaleString()} online
-                    </span>
-                  </button>
-                );
-              })}
-              {rankedServers.length === 0 && (
-                <div className="text-sm text-muted-foreground">No servers match your filter.</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="h-80 w-full">
-          {noneSelected ? (
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-white/20 text-sm text-muted-foreground">
-              Select at least one server to render the comparison chart.
-            </div>
-          ) : isFetching ? (
-            <Skeleton className="h-full w-full" />
-          ) : (
-            <ResponsiveContainer>
-              <LineChart data={combinedData} margin={{ left: 12, right: 18, top: 12, bottom: 12 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                <XAxis
-                  dataKey="timestamp"
-                  type="number"
-                  domain={["dataMin", "dataMax"]}
-                  tickFormatter={(value) => formatTimestamp(Number(value))}
-                  stroke="rgba(255,255,255,0.5)"
-                  tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 12 }}
-                />
-                <YAxis
-                  domain={yDomain as [number, number]}
-                  stroke="rgba(255,255,255,0.5)"
-                  tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 12 }}
-                  width={60}
-                  tickFormatter={(value) => Number(value).toLocaleString()}
-                />
-                <Tooltip
-                  content={<ComparisonTooltip seriesLookup={seriesLookup} />}
-                  cursor={{ stroke: "rgba(255,255,255,0.3)", strokeWidth: 1 }}
-                />
-                {seriesMeta.map((series) => (
-                  <Line
-                    key={series.ip}
-                    type="monotone"
-                    dataKey={series.dataKey}
-                    name={series.label}
-                    stroke={series.color}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    connectNulls
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {statsRows.length > 0 && (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {statsRows.map((row) => (
-              <div key={row.ip} className="rounded-lg border border-white/10 p-3">
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: row.color }}></span>
-                    {row.label}
-                  </span>
-                  <span>{row.ip}</span>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs text-muted-foreground">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide">Current</div>
-                    <div className="text-base font-semibold text-white">
-                      {row.current.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide">Mean</div>
-                    <div className="text-base font-semibold text-white">
-                      {row.avg.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide">Max</div>
-                    <div className="text-base font-semibold text-white">
-                      {row.max.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
+    <section className="rounded-3xl border border-white/10 bg-black/30 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.45)]">
+      <div className="flex flex-col gap-6 xl:flex-row">
+        <div className="flex-1 space-y-6">
+          <div className="rounded-2xl border border-white/10 bg-black/60 p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+                  {noneSelected ? "Comparison mode" : "Selected servers overview"}
+                </p>
+                <p className="text-3xl font-semibold text-white">{formatNumber(liveTotals.selected)}</p>
+                <p className="text-sm text-white/60">
+                  {noneSelected
+                    ? "Pick servers from the list to begin"
+                    : `${selectedCount.toLocaleString()} of ${totalServers.toLocaleString()} servers selected`}
+                </p>
               </div>
-            ))}
+              <div className="text-right text-xs uppercase tracking-wide text-white/60">
+                <div>{timeRange.toUpperCase()} range</div>
+                <div>{selectedCount ? "Live players" : "Waiting for data"}</div>
+              </div>
+            </div>
+            <div className="h-90 w-full rounded-xl border border-white/5 bg-black/40 p-3">{chartContent}</div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-2">
+            <DonutCard
+              title="Global players overview"
+              description="Live distribution"
+              data={globalDonutData}
+              total={liveTotals.total}
+            />
+            <DonutCard
+              title="Selected servers overview"
+              description="Selection breakdown"
+              data={selectedDonutData}
+              total={liveTotals.selected}
+            />
+          </div>
+        </div>
+        <div className="xl:w-105">
+          <div className="rounded-2xl border border-white/10 bg-black/60">
+            <div className="border-b border-white/10 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs uppercase tracking-wide text-white/60">
+                <span>Server directory</span>
+                <span>
+                  {selectedCount.toLocaleString()}/{totalServers.toLocaleString()} selected
+                </span>
+              </div>
+              <input
+                type="text"
+                placeholder="Filter by name or IP"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-white/30"
+              />
+              <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-white/60">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  disabled={allSelected}
+                  className="rounded-full border border-white/20 px-3 py-1 transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  disabled={noneSelected}
+                  className="rounded-full border border-white/20 px-3 py-1 transition hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear selection
+                </button>
+              </div>
+            </div>
+            <div>
+              <div className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,90px)] items-center gap-4 px-4 py-3 text-[11px] uppercase tracking-wide text-white/50">
+                <span>Servers</span>
+                <span className="text-right">Current</span>
+                <span className="text-right">Mean</span>
+                <span className="text-right">Max</span>
+              </div>
+              <div className="max-h-130 overflow-y-auto [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/25">
+                {rankedServers.map((server) => {
+                  const selected = selectedIps.includes(server.ip);
+                  const color = seriesColorByIp.get(server.ip)?.color ?? "#3f3f46";
+                  const stats = statsLookup.get(server.ip);
+                  const current = stats?.current ?? server.player_count ?? 0;
+                  const avg = stats?.avg ?? server.player_count ?? 0;
+                  const max = stats?.max ?? server.peak ?? server.player_count ?? 0;
+
+                  return (
+                    <button
+                      key={server.ip}
+                      type="button"
+                      onClick={() => toggleServer(server.ip)}
+                      className={`relative grid min-w-0 grid-cols-[minmax(0,1.6fr)_repeat(3,90px)] items-center gap-4 px-4 py-3 text-left transition ${
+                        selected ? "bg-white/10" : "hover:bg-white/5"
+                      }`}
+                    >
+                      {selected && (
+                        <span
+                          className="absolute inset-y-1 left-0 w-1 rounded-full"
+                          style={{ backgroundColor: color }}
+                        ></span>
+                      )}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }}></span>
+                        <div className="flex min-w-0 items-center gap-3">
+                          {server.icon ? (
+                            <img
+                              src={server.icon}
+                              alt={server.name ?? server.ip}
+                              className="h-10 w-10 rounded-lg border border-white/10 object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-xs uppercase tracking-wider text-white/70">
+                              {(server.name ?? server.ip).slice(0, 2)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-white">{server.name ?? server.ip}</div>
+                            <div className="truncate text-xs text-white/50">{server.ip}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-right font-mono text-sm text-white tabular-nums">
+                        {formatNumber(current)}
+                      </span>
+                      <span className="text-right font-mono text-sm text-white/80 tabular-nums">
+                        {formatNumber(avg)}
+                      </span>
+                      <span className="text-right font-mono text-sm text-green-300 tabular-nums">
+                        {formatNumber(max)}
+                      </span>
+                    </button>
+                  );
+                })}
+                {rankedServers.length === 0 && (
+                  <div className="px-4 py-6 text-center text-sm text-white/60">
+                    No servers match your filters.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

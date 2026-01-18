@@ -14,6 +14,10 @@ import React from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
+import { Button } from "../ui/button";
+import { ArrowUpRight } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { useRouter } from "next/navigation";
 
 interface ServerCardProps {
   server: Server;
@@ -25,6 +29,8 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const [loading, setLoading] = useState(true);
 
   const { isConnected, on, off } = useWebSocket();
+
+  const router = useRouter();
 
   const maxDataPointsRef = useRef(1000);
   const bufferRef = useRef<ServerDataPoint[]>([]);
@@ -193,6 +199,17 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
               <CardDescription className="truncate">{server.ip}</CardDescription>
             </div>
           </div>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => {router.push(`/server/${encodeURIComponent(server.ip)}`)}}>
+                    <ArrowUpRight size={16} />
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+                <p>View server page</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
