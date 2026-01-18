@@ -125,8 +125,8 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/minetracker-frontend
           tags: |
             type=raw,value=${{ steps.version.outputs.new_tag }}+{{sha}},enable=${{ github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/release' && steps.check_commits.outputs.no_new_commits != 'true' }}
             type=raw,value=dev-{{sha}},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push Docker image
