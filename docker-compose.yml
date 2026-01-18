@@ -1,4 +1,9 @@
 services:
+  mongodb:
+    image: mongo:8.2.3
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
   minetracker-backend:
     image: ghcr.io/minetrackergg/minetracker-backend:latest
     environment:
@@ -6,7 +11,7 @@ services:
       HTTP_PORT: 8000
       FRONTEND_URL: http://minetracker-frontend:3000
 
-      MONGO_URI: mongodb://localhost:27017/
+      MONGO_URI: mongodb://mongodb:27017/
       INFLUXDB_URL: http://localhost:8086
       INFLUXDB_TOKEN: token
       INFLUXDB_ORG: minetracker
