@@ -34,6 +34,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const statsRef = useRef({
     current: 0,
     max: 0,
+    min: Infinity,
     sum: 0,
     count: 0,
   });
@@ -76,6 +77,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
 
           statsRef.current.current = p.player_count;
           statsRef.current.max = Math.max(statsRef.current.max, p.player_count);
+          statsRef.current.min = Math.min(statsRef.current.min, p.player_count);
           statsRef.current.sum += p.player_count;
           statsRef.current.count += 1;
         }
@@ -123,6 +125,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
         statsRef.current = {
           current: clean.at(-1)?.player_count ?? 0,
           max: Math.max(0, ...clean.map((p) => p.player_count)),
+          min: clean.length > 0 ? Math.min(...clean.map((p) => p.player_count)) : 0,
           sum: clean.reduce((s, p) => s + p.player_count, 0),
           count: clean.length,
         };
@@ -169,6 +172,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
     return {
       current: s.current,
       max: s.max,
+      min: s.min === Infinity ? 0 : s.min,
       avg: s.count ? Math.round(s.sum / s.count) : 0,
     };
   }, [dataPoints]);
@@ -269,26 +273,33 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
       </CardContent>
 
       <CardFooter className="border-t border-white/5 pt-4">
-        <div className="grid w-full gap-4 text-center text-xs text-muted-foreground md:grid-cols-3">
-          {["Current", "Mean", "Max"].map((label) => {
+        <div className="grid w-full grid-cols-2 divide-x divide-white/10 text-center text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-5">
+          {["Current", "Mean", "Min", "Max", "Alltime"].map((label) => {
             const value =
-              label === "Current" ? stats.current : label === "Mean" ? stats.avg : stats.max;
+              label === "Current" ? stats.current :
+              label === "Mean" ? stats.avg :
+              label === "Min" ? stats.min :
+              label === "Max" ? stats.max : server.peak;
             const colorClass =
               label === "Current"
                 ? "bg-green-500"
                 : label === "Mean"
                   ? "bg-blue-500"
-                  : "bg-red-500";
+                  : label === "Min"
+                    ? "bg-yellow-500"
+                    : label === "Max"
+                      ? "bg-red-500"
+                      : "bg-purple-500";
             return (
-              <div key={label} className="flex flex-col items-center gap-1">
+              <div key={label} className="flex flex-col items-center gap-1 px-2 py-1">
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${colorClass}`} aria-hidden />
                   <span>{label}</span>
                 </div>
                 {loading ? (
-                  <Skeleton className="h-7 w-16" />
+                  <Skeleton className="h-6 w-12" />
                 ) : (
-                  <span className="text-2xl font-semibold text-white">{value.toLocaleString()}</span>
+                  <span className="text-lg font-semibold text-white">{value.toLocaleString()}</span>
                 )}
               </div>
             );
