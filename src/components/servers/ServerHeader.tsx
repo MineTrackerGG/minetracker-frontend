@@ -1,11 +1,37 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface ServerHeaderProps {
     servers: number;
     totalPlayers: number;
+    lastUpdateTime: number | null;
 }
 
-export default function ServerHeader({ servers, totalPlayers }: ServerHeaderProps) {
+export default function ServerHeader({ servers, totalPlayers, lastUpdateTime }: ServerHeaderProps) {
+    const [secondsSinceUpdate, setSecondsSinceUpdate] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!lastUpdateTime) {
+            return;
+        }
+
+        const update = () => {
+            setSecondsSinceUpdate(Math.max(0, Math.floor((Date.now() - lastUpdateTime) / 1000)));
+        };
+
+        update();
+        const interval = setInterval(update, 1000);
+        return () => clearInterval(interval);
+    }, [lastUpdateTime]);
+
+    const updateMessage =
+        !lastUpdateTime || secondsSinceUpdate == null
+            ? 'Waiting for live data'
+            : secondsSinceUpdate === 0
+                ? 'Last updated now'
+                : `Last update ${secondsSinceUpdate} ${secondsSinceUpdate === 1 ? 'second' : 'seconds'} ago`;
+
     return (
         <header
             id="header"
@@ -30,6 +56,7 @@ export default function ServerHeader({ servers, totalPlayers }: ServerHeaderProp
             <span className="text-lg text-whiteMT dark:text-secondText">
                 Historical and real-time data for Minecraft servers
             </span>
+            <span className="text-sm text-white/80 dark:text-gray-300">{updateMessage}</span>
         </header>
     );
 }

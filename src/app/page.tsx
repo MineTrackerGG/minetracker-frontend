@@ -7,6 +7,7 @@ import ServerHeader from "@/components/servers/ServerHeader";
 import ServerSortingSelect, { SortOption } from "@/components/servers/ServerSortingSelect";
 import ServerTimeSelect, { TimeOption } from "@/components/servers/ServerTimeSelect";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { parseLiveDataPayload, type LiveDataPoint } from "@/lib/liveData";
 import { Server } from "@/types/server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,59 +18,84 @@ export default function Home() {
   const [timeRange, setTimeRange] = useState<TimeOption>("7d");
   const [showComparison, setShowComparison] = useState(false);
   const [comparisonSelection, setComparisonSelection] = useState<string[]>([]);
+  const [lastUpdateTime, setLastUpdateTime] = useState<number | null>(null);
   const selectionInitializedRef = useRef(false);
   const prevServerCountRef = useRef(0);
+  const applyLiveUpdates = useCallback((rawPoints: unknown[]) => {
+    const normalized = rawPoints
+      .map(parseLiveDataPayload)
+      .filter((point): point is LiveDataPoint => Boolean(point));
+
+    if (!normalized.length) {
+      return;
+    }
+
+    const byIp = new Map(normalized.map((point) => [point.ip, point]));
+    let applied = false;
+
+    setServers((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      const next = prev.map((server) => {
+        const update = byIp.get(server.ip);
+        if (!update || server.player_count === update.playerCount) {
+          return server;
+        }
+
+        applied = true;
+        return { ...server, player_count: update.playerCount };
+      });
+
+      return applied ? next : prev;
+    });
+
+    if (applied) {
+      setLastUpdateTime(Date.now());
+    }
+  }, []);
 
   const globalPlayercount = useMemo(() => {
     return servers.reduce((acc, server) => acc + server.player_count, 0);
   }, [servers]);
 
   useEffect(() => {
-    const handleServersUpdate = (data: { servers: Server[] }) => {
-      if (data.servers) {
-        setServers(data.servers);
+    const handleServersUpdate = (data: { servers?: Server[] }) => {
+      if (!data.servers) {
+        return;
       }
+
+      setServers(data.servers);
+      setLastUpdateTime(Date.now());
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleDataPointAdd = (data: any) => {
-      const serverData = data?.data;
-      if (!serverData) return;
+    const handleDataPointBatch = (payload: any) => {
+      if (!Array.isArray(payload?.data)) {
+        return;
+      }
+      applyLiveUpdates(payload.data);
+    };
 
-      const isValidCount =
-        typeof serverData.player_count === "number" &&
-        Number.isFinite(serverData.player_count) &&
-        serverData.player_count >= 0 &&
-        serverData.player_count <= 100000;
-
-      if (!isValidCount || typeof serverData.ip !== "string") return;
-
-      setServers((prev) => {
-        if (prev.length === 0) return prev; // 🔑 WICHTIG
-
-        let changed = false;
-
-        const next = prev.map((server) => {
-          if (server.ip !== serverData.ip) return server;
-
-          if (server.player_count === serverData.player_count) return server;
-
-          changed = true;
-          return { ...server, player_count: serverData.player_count };
-        });
-
-        return changed ? next : prev;
-      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleRealtimePoint = (payload: any) => {
+      if (!payload?.data) {
+        return;
+      }
+      applyLiveUpdates([payload.data]);
     };
 
     on("servers_update", handleServersUpdate);
-    on("data_point_add", handleDataPointAdd);
+    on("data_point_batch", handleDataPointBatch);
+    on("data_point_rt", handleRealtimePoint);
 
     return () => {
       off("servers_update", handleServersUpdate);
-      off("data_point_add", handleDataPointAdd);
+      off("data_point_batch", handleDataPointBatch);
+      off("data_point_rt", handleRealtimePoint);
     };
-  }, [on, off]);
+  }, [applyLiveUpdates, on, off]);
 
   const sortedServers = useMemo(() => {
     return [...servers].sort((a, b) => {
@@ -186,7 +212,11 @@ export default function Home() {
       ) : (
         <>
           <div className="mb-6">
-            <ServerHeader servers={servers.length} totalPlayers={globalPlayercount} />
+            <ServerHeader
+              servers={servers.length}
+              totalPlayers={globalPlayercount}
+              lastUpdateTime={lastUpdateTime}
+            />
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
               <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
               <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />

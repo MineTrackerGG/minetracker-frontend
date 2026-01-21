@@ -9,7 +9,7 @@ export type Server = {
 }
 
 export type ServerDataPoint = {
-    timestamp: bigint;
+    timestamp: number;
     player_count: number;
     ip: string;
     name: string;

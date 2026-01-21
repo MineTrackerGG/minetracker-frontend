@@ -18,6 +18,8 @@ import {
   PieChart,
   Cell,
 } from "recharts";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { livePointToServerDataPoint, parseLiveDataPayload, type LiveDataPoint } from "@/lib/liveData";
 
 const MAX_POINTS = 240;
 const LINE_PALETTE = ["#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ef4444", "#14b8a6"];
@@ -229,7 +231,63 @@ export default function ServerComparisonPanel({
   const [isFetching, setIsFetching] = useState(false);
   const inFlightRef = useRef<Record<string, Set<string>>>({});
 
+  const { send, on, off } = useWebSocket();
+
   const comparisonData = useMemo(() => dataByRange[timeRange] ?? {}, [dataByRange, timeRange]);
+
+  const ingestLivePoints = useCallback((rawPoints: unknown | unknown[]) => {
+    const queue = Array.isArray(rawPoints) ? rawPoints : [rawPoints];
+    const normalized = queue
+      .map(parseLiveDataPayload)
+      .filter((point): point is LiveDataPoint => Boolean(point))
+      .map(livePointToServerDataPoint);
+
+    if (!normalized.length) {
+      return;
+    }
+
+    setDataByRange((prev) => {
+      const next = { ...prev } as Record<string, ComparisonData>;
+      let mutated = false;
+
+      normalized.forEach((livePoint) => {
+        Object.keys(next).forEach((rangeKey) => {
+          const rangeData = next[rangeKey];
+          if (!rangeData) {
+            return;
+          }
+
+          const existingSeries = rangeData[livePoint.ip];
+          if (!existingSeries) {
+            return;
+          }
+
+          const lastPoint = existingSeries.at(-1);
+          const hasSameTimestamp = lastPoint && Number(lastPoint.timestamp) === Number(livePoint.timestamp);
+          const updatedSeries = hasSameTimestamp
+            ? [...existingSeries.slice(0, -1), livePoint]
+            : sanitizePoints([...existingSeries, livePoint]);
+
+          next[rangeKey] = { ...rangeData, [livePoint.ip]: updatedSeries };
+          mutated = true;
+        });
+      });
+
+      return mutated ? next : prev;
+    });
+  }, []);
+
+  useEffect(() => {
+    selectedIps.forEach(ip =>
+      send({ type: "subscribe_server", ip })
+    );
+
+    return () => {
+      selectedIps.forEach(ip =>
+        send({ type: "unsubscribe_server", ip })
+      );
+    };
+  }, [selectedIps, send]);
 
   useEffect(() => {
     if (selectedIps.length === 0) {
@@ -284,6 +342,32 @@ export default function ServerComparisonPanel({
       }
     };
   }, [selectedIps, timeRange, comparisonData]);
+
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleRealtimePoint = (payload: any) => {
+      if (!payload?.data) {
+        return;
+      }
+      ingestLivePoints(payload.data);
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleDataPointBatch = (payload: any) => {
+      if (!Array.isArray(payload?.data)) {
+        return;
+      }
+      ingestLivePoints(payload.data);
+    };
+
+    on("data_point_rt", handleRealtimePoint);
+    on("data_point_batch", handleDataPointBatch);
+
+    return () => {
+      off("data_point_rt", handleRealtimePoint);
+      off("data_point_batch", handleDataPointBatch);
+    };
+  }, [ingestLivePoints, on, off]);
 
   const rankedServers = useMemo(
     () =>

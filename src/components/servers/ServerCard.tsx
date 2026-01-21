@@ -14,6 +14,7 @@ import React from "react";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
+import { livePointToServerDataPoint, parseLiveDataPayload } from "@/lib/liveData";
 
 interface ServerCardProps {
   server: Server;
@@ -24,7 +25,7 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const [dataPoints, setDataPoints] = useState<ServerDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { isConnected, on, off } = useWebSocket();
+  const { isConnected, on, off, send } = useWebSocket();
 
   const maxDataPointsRef = useRef(1000);
   const bufferRef = useRef<ServerDataPoint[]>([]);
@@ -42,26 +43,55 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   const [, forceUpdate] = useState(0);
   const { ref, visible } = useVisible<HTMLDivElement>();
 
+  const enqueueLivePoint = useCallback((rawPoint: unknown) => {
+    const parsed = parseLiveDataPayload(rawPoint);
+    if (!parsed || parsed.ip !== server.ip) {
+      return;
+    }
+
+    bufferRef.current.push(livePointToServerDataPoint(parsed));
+  }, [server.ip]);
+
   useEffect(() => {
-    const handleDataPointAdd = (data: any) => {
-      const serverData = data?.data;
-      if (!serverData || serverData.ip !== server.ip) return;
+    const handleDataPointBatch = (data: any) => {
+      if (!Array.isArray(data?.data)) {
+        return;
+      }
 
-      const isValidCount =
-        typeof serverData.player_count === "number" &&
-        Number.isFinite(serverData.player_count) &&
-        serverData.player_count >= 0 &&
-        serverData.player_count <= 100000;
-      const hasTimestamp = serverData.timestamp != null;
-
-      if (!isValidCount || !hasTimestamp) return;
-
-      bufferRef.current.push(serverData);
+      data.data.forEach(enqueueLivePoint);
     };
 
-    on("data_point_add", handleDataPointAdd);
-    return () => off("data_point_add", handleDataPointAdd);
-  }, [on, off, server.ip]);
+    const handleRealtimePoint = (data: any) => {
+      if (!data?.data) {
+        return;
+      }
+
+      enqueueLivePoint(data.data);
+    };
+
+    on("data_point_batch", handleDataPointBatch);
+    on("data_point_rt", handleRealtimePoint);
+
+    return () => {
+      off("data_point_batch", handleDataPointBatch);
+      off("data_point_rt", handleRealtimePoint);
+    };
+  }, [enqueueLivePoint, on, off]);
+
+  useEffect(() => {
+    send({
+      type: "subscribe_server",
+      ip: server.ip,
+    });
+
+    return () => {
+      send({
+        type: "unsubscribe_server",
+        ip: server.ip,
+      });
+    };
+  }, [server.ip]);
+
 
   useEffect(() => {
     const interval = setInterval(() => {
