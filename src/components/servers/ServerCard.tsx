@@ -53,27 +53,25 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
   }, [server.ip]);
 
   useEffect(() => {
-    const handleDataPointBatch = (data: any) => {
-      if (!Array.isArray(data?.data)) {
-        return;
-      }
-
-      data.data.forEach(enqueueLivePoint);
-    };
-
     const handleRealtimePoint = (data: any) => {
       if (!data?.data) {
         return;
       }
 
+      if (data.data.ip !== server.ip) {
+        return;
+      }
+
+      if (data.data.ip === "donutsmp.net") {
+        console.log("Received realtime data point for", server.ip, data.data.player_count);
+      }
+
       enqueueLivePoint(data.data);
     };
 
-    on("data_point_batch", handleDataPointBatch);
     on("data_point_rt", handleRealtimePoint);
 
     return () => {
-      off("data_point_batch", handleDataPointBatch);
       off("data_point_rt", handleRealtimePoint);
     };
   }, [enqueueLivePoint, on, off]);

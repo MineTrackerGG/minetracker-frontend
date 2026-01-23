@@ -352,20 +352,10 @@ export default function ServerComparisonPanel({
       ingestLivePoints(payload.data);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleDataPointBatch = (payload: any) => {
-      if (!Array.isArray(payload?.data)) {
-        return;
-      }
-      ingestLivePoints(payload.data);
-    };
-
     on("data_point_rt", handleRealtimePoint);
-    on("data_point_batch", handleDataPointBatch);
 
     return () => {
       off("data_point_rt", handleRealtimePoint);
-      off("data_point_batch", handleDataPointBatch);
     };
   }, [ingestLivePoints, on, off]);
 

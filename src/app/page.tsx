@@ -8,6 +8,7 @@ import ServerSortingSelect, { SortOption } from "@/components/servers/ServerSort
 import ServerTimeSelect, { TimeOption } from "@/components/servers/ServerTimeSelect";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { parseLiveDataPayload, type LiveDataPoint } from "@/lib/liveData";
+import { getServers } from "@/lib/serverData";
 import { Server } from "@/types/server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -55,29 +56,22 @@ export default function Home() {
       setLastUpdateTime(Date.now());
     }
   }, []);
+  
+  // set first servers on initial render using getServers from serverData.ts
+  useEffect(() => {
+    async function fetchInitialServers() {
+      const initialServers = await getServers();
+      console.log("Fetched initial servers:", initialServers);
+      setServers(initialServers);
+    }
+    fetchInitialServers();
+  }, []);
 
   const globalPlayercount = useMemo(() => {
-    return servers.reduce((acc, server) => acc + server.player_count, 0);
+    return (servers ?? []).reduce((acc, server) => acc + server.player_count, 0);
   }, [servers]);
 
   useEffect(() => {
-    const handleServersUpdate = (data: { servers?: Server[] }) => {
-      if (!data.servers) {
-        return;
-      }
-
-      setServers(data.servers);
-      setLastUpdateTime(Date.now());
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleDataPointBatch = (payload: any) => {
-      if (!Array.isArray(payload?.data)) {
-        return;
-      }
-      applyLiveUpdates(payload.data);
-    };
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleRealtimePoint = (payload: any) => {
       if (!payload?.data) {
@@ -86,13 +80,9 @@ export default function Home() {
       applyLiveUpdates([payload.data]);
     };
 
-    on("servers_update", handleServersUpdate);
-    on("data_point_batch", handleDataPointBatch);
     on("data_point_rt", handleRealtimePoint);
 
     return () => {
-      off("servers_update", handleServersUpdate);
-      off("data_point_batch", handleDataPointBatch);
       off("data_point_rt", handleRealtimePoint);
     };
   }, [applyLiveUpdates, on, off]);
