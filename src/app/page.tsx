@@ -56,7 +56,6 @@ export default function Home() {
   useEffect(() => {
     async function fetchInitialServers() {
       const initialServers = await getServers();
-      console.log("Fetched initial servers:", initialServers);
       setServers(initialServers);
     }
     fetchInitialServers();

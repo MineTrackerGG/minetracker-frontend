@@ -62,10 +62,6 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
         return;
       }
 
-      if (data.data.ip === "donutsmp.net") {
-        console.log("Received realtime data point for", server.ip, data.data.player_count);
-      }
-
       enqueueLivePoint(data.data);
     };
 
