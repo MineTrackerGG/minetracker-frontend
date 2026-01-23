@@ -19,7 +19,6 @@ export default function Home() {
   const [timeRange, setTimeRange] = useState<TimeOption>("7d");
   const [showComparison, setShowComparison] = useState(false);
   const [comparisonSelection, setComparisonSelection] = useState<string[]>([]);
-  const [lastUpdateTime, setLastUpdateTime] = useState<number | null>(null);
   const selectionInitializedRef = useRef(false);
   const prevServerCountRef = useRef(0);
   const applyLiveUpdates = useCallback((rawPoints: unknown[]) => {
@@ -51,10 +50,6 @@ export default function Home() {
 
       return applied ? next : prev;
     });
-
-    if (applied) {
-      setLastUpdateTime(Date.now());
-    }
   }, []);
   
   // set first servers on initial render using getServers from serverData.ts
@@ -205,7 +200,6 @@ export default function Home() {
             <ServerHeader
               servers={servers.length}
               totalPlayers={globalPlayercount}
-              lastUpdateTime={lastUpdateTime}
             />
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
               <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
