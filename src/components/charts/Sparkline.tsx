@@ -5,6 +5,8 @@ interface SparklineProps {
   timestamps: number[];
   height?: number;
   yRange?: { min: number; max: number };
+  syncTimestamp?: number | null;
+  onSyncTimestamp?: (ts: number | null) => void;
 }
 
 export function Sparkline({
@@ -12,12 +14,21 @@ export function Sparkline({
   timestamps,
   height = 80,
   yRange,
+  syncTimestamp,
+  onSyncTimestamp,
 }: SparklineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState(0);
   const [hoverY, setHoverY] = useState(0);
   const [canvasWidth, setCanvasWidth] = useState(0);
+
+  // clear local hover when external sync cleared
+  useEffect(() => {
+    if (syncTimestamp == null) {
+      setHoverIndex(null);
+    }
+  }, [syncTimestamp]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -132,10 +143,14 @@ export function Sparkline({
     const index = Math.round(
       (x / rect.width) * (values.length - 1)
     );
-
-    setHoverIndex(Math.max(0, Math.min(values.length - 1, index)));
+    const clamped = Math.max(0, Math.min(values.length - 1, index));
+    setHoverIndex(clamped);
     setHoverX(x);
     setHoverY(y);
+    if (onSyncTimestamp) {
+      const ts = timestamps[clamped];
+      onSyncTimestamp(ts ?? null);
+    }
     };
 
     const showTooltip =
@@ -163,10 +178,28 @@ export function Sparkline({
         className="w-full rounded-md"
         style={{ height }}
         onMouseMove={onMove}
-        onMouseLeave={() => setHoverIndex(null)}
+        onMouseLeave={() => {
+          setHoverIndex(null);
+          onSyncTimestamp?.(null);
+        }}
       />
 
-        {showTooltip && (
+      {/* sync from external timestamp */}
+      {syncTimestamp != null && values.length > 0 && (
+        <SyncHandler
+          syncTimestamp={syncTimestamp}
+          timestamps={timestamps}
+          values={values}
+          width={canvasWidth}
+          height={height}
+          yRange={yRange}
+          setHoverIndex={setHoverIndex}
+          setHoverX={setHoverX}
+          setHoverY={setHoverY}
+        />
+      )}
+
+      {showTooltip && (
         <div
             className="pointer-events-none absolute z-10 bg-background border rounded-md px-2 py-1 text-xs shadow"
             style={{
@@ -184,4 +217,59 @@ export function Sparkline({
         )}
     </div>
   );
+}
+
+function SyncHandler({
+  syncTimestamp,
+  timestamps,
+  values,
+  width,
+  height,
+  yRange,
+  setHoverIndex,
+  setHoverX,
+  setHoverY,
+}: {
+  syncTimestamp: number;
+  timestamps: number[];
+  values: number[];
+  width: number;
+  height: number;
+  yRange?: { min: number; max: number };
+  setHoverIndex: (i: number | null) => void;
+  setHoverX: (x: number) => void;
+  setHoverY: (y: number) => void;
+}) {
+  useEffect(() => {
+    if (syncTimestamp == null) return;
+    if (!timestamps || timestamps.length === 0 || width === 0) return;
+
+    // find closest timestamp index
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < timestamps.length; i++) {
+      const diff = Math.abs((timestamps[i] ?? 0) - syncTimestamp);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = i;
+      }
+    }
+
+    const idx = Math.max(0, Math.min(values.length - 1, bestIdx));
+    setHoverIndex(idx);
+    const x = (idx / (values.length - 1)) * width;
+
+    const rawMin = Math.min(...values);
+    const rawMax = Math.max(...values);
+    const padding = Math.max((rawMax - rawMin) * 0.12, 1);
+    const min = yRange ? yRange.min : Math.max(0, rawMin - padding);
+    const max = yRange ? yRange.max : rawMax + padding;
+    const range = max - min || 1;
+    const y = height - ((values[idx] - min) / range) * height;
+
+    setHoverX(x);
+    setHoverY(y);
+  }, [syncTimestamp, timestamps, values, width, height, yRange, setHoverIndex, setHoverX, setHoverY]);
+
+  return null;
 }

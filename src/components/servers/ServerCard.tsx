@@ -19,9 +19,13 @@ import { livePointToServerDataPoint, parseLiveDataPayload } from "@/lib/liveData
 interface ServerCardProps {
   server: Server;
   timeRange: string;
+  hidden?: boolean;
+  onToggleHidden?: (ip: string) => void;
+  syncTimestamp?: number | null;
+  onSyncTimestamp?: (ts: number | null) => void;
 }
 
-function ServerCard({ server, timeRange }: ServerCardProps) {
+function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTimestamp, onSyncTimestamp }: ServerCardProps) {
   const [dataPoints, setDataPoints] = useState<ServerDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -267,6 +271,19 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
         <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
           {loading || !isConnected || !visible ? (
             <Skeleton className="h-40 w-full" />
+          ) : hidden ? (
+            <div className="h-40 flex items-center justify-center">
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-muted-foreground">Hidden</div>
+                <button
+                  type="button"
+                  onClick={() => onToggleHidden?.(server.ip)}
+                  className="rounded px-2 py-1 text-xs bg-white/5"
+                >
+                  Show
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="relative flex flex-col gap-3">
               <div className="relative flex-1">
@@ -282,6 +299,8 @@ function ServerCard({ server, timeRange }: ServerCardProps) {
                     timestamps={sparklineTimestamps}
                     height={150}
                     yRange={yRange}
+                    syncTimestamp={syncTimestamp}
+                    onSyncTimestamp={onSyncTimestamp}
                   />
                 </div>
               </div>

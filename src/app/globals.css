@@ -178,3 +178,12 @@
     letter-spacing: var(--tracking-normal);
   }
 }
+
+/* hide native scrollbars for dropdowns */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
