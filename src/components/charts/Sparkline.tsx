@@ -7,6 +7,7 @@ interface SparklineProps {
   yRange?: { min: number; max: number };
   syncTimestamp?: number | null;
   onSyncTimestamp?: (ts: number | null) => void;
+  isVisible?: boolean;
 }
 
 export function Sparkline({
@@ -16,6 +17,7 @@ export function Sparkline({
   yRange,
   syncTimestamp,
   onSyncTimestamp,
+  isVisible = true,
 }: SparklineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -26,7 +28,8 @@ export function Sparkline({
   // clear local hover when external sync cleared
   useEffect(() => {
     if (syncTimestamp == null) {
-      setHoverIndex(null);
+      const raf = requestAnimationFrame(() => setHoverIndex(null));
+      return () => cancelAnimationFrame(raf);
     }
   }, [syncTimestamp]);
 
@@ -147,13 +150,14 @@ export function Sparkline({
     setHoverIndex(clamped);
     setHoverX(x);
     setHoverY(y);
-    if (onSyncTimestamp) {
+    if (onSyncTimestamp && isVisible) {
       const ts = timestamps[clamped];
       onSyncTimestamp(ts ?? null);
     }
     };
 
     const showTooltip =
+    isVisible &&
     hoverIndex !== null &&
     hoverIndex >= 0 &&
     hoverIndex < values.length &&
@@ -185,7 +189,7 @@ export function Sparkline({
       />
 
       {/* sync from external timestamp */}
-      {syncTimestamp != null && values.length > 0 && (
+      {syncTimestamp != null && values.length > 0 && isVisible && (
         <SyncHandler
           syncTimestamp={syncTimestamp}
           timestamps={timestamps}

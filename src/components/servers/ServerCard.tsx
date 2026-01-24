@@ -301,6 +301,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
                     yRange={yRange}
                     syncTimestamp={syncTimestamp}
                     onSyncTimestamp={onSyncTimestamp}
+                    isVisible={visible}
                   />
                 </div>
               </div>
