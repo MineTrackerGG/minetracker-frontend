@@ -2,7 +2,6 @@
 
 import LoadingScreen from "@/components/LoadingScreen";
 import ServerCard from "@/components/servers/ServerCard";
-import ServerComparisonPanel from "@/components/servers/ServerComparisonPanel";
 import ServerHeader from "@/components/servers/ServerHeader";
 import ServerSortingSelect, { SortOption } from "@/components/servers/ServerSortingSelect";
 import ServerTimeSelect, { TimeOption } from "@/components/servers/ServerTimeSelect";
@@ -17,8 +16,6 @@ export default function Home() {
   const [servers, setServers] = useState<Server[]>([]);
   const [sortOption, setSortOption] = useState<SortOption>("most-players");
   const [timeRange, setTimeRange] = useState<TimeOption>("7d");
-  const [showComparison, setShowComparison] = useState(false);
-  const [comparisonSelection, setComparisonSelection] = useState<string[]>([]);
   const selectionInitializedRef = useRef(false);
   const prevServerCountRef = useRef(0);
   const applyLiveUpdates = useCallback((rawPoints: unknown[]) => {
@@ -106,41 +103,8 @@ export default function Home() {
     }
 
     const serverIps = servers.map((server) => server.ip);
-    const prevCount = prevServerCountRef.current;
     prevServerCountRef.current = serverIps.length;
-
-    setComparisonSelection((prev) => {
-      if (!selectionInitializedRef.current) {
-        selectionInitializedRef.current = true;
-        return serverIps;
-      }
-
-      const filtered = prev.filter((ip) => serverIps.includes(ip));
-      const wasAllSelected = prevCount > 0 && prev.length === prevCount;
-
-      if (wasAllSelected) {
-        if (
-          filtered.length === serverIps.length &&
-          filtered.every((ip, index) => ip === serverIps[index])
-        ) {
-          return prev;
-        }
-        return serverIps;
-      }
-
-      if (filtered.length !== prev.length) {
-        return filtered;
-      }
-
-      return prev;
-    });
   }, [servers]);
-
-  const handleSelectionChange = useCallback((ips: string[]) => {
-    selectionInitializedRef.current = true;
-    const unique = Array.from(new Set(ips));
-    setComparisonSelection(unique);
-  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -163,37 +127,6 @@ export default function Home() {
       {!isConnected && <LoadingScreen message="Connecting to backend..." />}
       {!servers.length && isConnected && <LoadingScreen message="Loading server data..." />}
 
-      {showComparison ? (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-white/50">Comparison dashboard</p>
-              <h1 className="text-3xl font-semibold text-white">Multi-server overview</h1>
-              <p className="text-sm text-white/60">
-                {servers.length
-                  ? `${servers.length.toLocaleString()} servers live • ${globalPlayercount.toLocaleString()} players online`
-                  : "Waiting for live data"}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
-              <button
-                type="button"
-                onClick={() => setShowComparison(false)}
-                className="rounded-full border border-white/30 px-4 py-2 text-sm text-white transition hover:border-white hover:bg-white/10"
-              >
-                Back to overview
-              </button>
-            </div>
-          </div>
-          <ServerComparisonPanel
-            servers={sortedServers}
-            timeRange={timeRange}
-            selectedIps={comparisonSelection}
-            onSelectionChange={handleSelectionChange}
-          />
-        </div>
-      ) : (
         <>
           <div className="mb-6">
             <ServerHeader
@@ -203,13 +136,6 @@ export default function Home() {
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
               <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
               <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />
-              <button
-                type="button"
-                onClick={() => setShowComparison(true)}
-                className="rounded-md border border-white/20 px-4 py-2 text-sm text-white transition hover:border-white hover:bg-white/10"
-              >
-                Enter comparison
-              </button>
             </div>
           </div>
 
@@ -219,7 +145,6 @@ export default function Home() {
             ))}
           </div>
         </>
-      )}
     </div>
   );
 }
