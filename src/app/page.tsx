@@ -253,10 +253,11 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {sortedServers
               .filter((s) => !hiddenMap[s.ip])
-              .map((server) => (
+              .map((server, idx) => (
                 <ServerCard
                   server={server}
                   key={server.ip}
+                  position={idx + 1}
                   timeRange={timeRange}
                   hidden={Boolean(hiddenMap[server.ip])}
                   onToggleHidden={(ip) =>

@@ -23,9 +23,10 @@ interface ServerCardProps {
   onToggleHidden?: (ip: string) => void;
   syncTimestamp?: number | null;
   onSyncTimestamp?: (ts: number | null) => void;
+  position?: number;
 }
 
-function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTimestamp, onSyncTimestamp }: ServerCardProps) {
+function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTimestamp, onSyncTimestamp, position }: ServerCardProps) {
   const [dataPoints, setDataPoints] = useState<ServerDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -250,7 +251,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
     <Card className="w-full max-w-2xl">
       <CardContent ref={ref} className="space-y-6 pb-4 pt-6">
         <div className="flex flex-col gap-6 md:flex-row md:items-center">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative h-16 w-16 shrink-0">
               <Image
                 src={iconSrc}
@@ -261,9 +262,16 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
                 unoptimized
               />
             </div>
-            <div className="min-w-0">
-              <CardTitle className="truncate text-xl leading-tight">{server.name || server.ip}</CardTitle>
-              <CardDescription className="truncate">{server.ip}</CardDescription>
+            <div className="min-w-0 flex items-center gap-3">
+              {typeof position === "number" && (
+                <div className="shrink-0">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-xs font-semibold text-white">{position}</span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <CardTitle className="truncate text-xl leading-tight">{server.name || server.ip}</CardTitle>
+                <CardDescription className="truncate">{server.ip}</CardDescription>
+              </div>
             </div>
           </div>
         </div>
@@ -317,7 +325,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
       </CardContent>
 
       <CardFooter className="border-t border-white/5 pt-4">
-        <div className="grid w-full grid-cols-2 divide-x divide-white/10 text-center text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mx-auto w-fit grid grid-cols-2 divide-x divide-white/10 text-center text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-5">
           {["Current", "Mean", "Min", "Max"].map((label) => {
             const value =
               label === "Current" ? stats.current :
