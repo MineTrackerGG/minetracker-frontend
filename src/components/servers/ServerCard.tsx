@@ -318,7 +318,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
 
       <CardFooter className="border-t border-white/5 pt-4">
         <div className="grid w-full grid-cols-2 divide-x divide-white/10 text-center text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-5">
-          {["Current", "Mean", "Min", "Max", "Alltime"].map((label) => {
+          {["Current", "Mean", "Min", "Max"].map((label) => {
             const value =
               label === "Current" ? stats.current :
               label === "Mean" ? stats.avg :
