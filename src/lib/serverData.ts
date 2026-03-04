@@ -18,7 +18,7 @@ export async function getServers(): Promise<Server[]> {
         return [];
     }
     const data = await response.json();
-    return data;
+    return Array.isArray(data) ? data : [];
 }
 
 export type BulkServerDataResponse = {
