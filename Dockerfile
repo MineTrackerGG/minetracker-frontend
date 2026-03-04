@@ -8,6 +8,8 @@ RUN bun install --frozen-lockfile
 
 FROM base AS runner
 ENV NODE_ENV=production
+ARG GIT_COMMIT_SHA=unknown
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 EXPOSE 3000

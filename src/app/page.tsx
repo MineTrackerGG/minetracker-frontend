@@ -10,7 +10,22 @@ import { parseLiveDataPayload, type LiveDataPoint } from "@/lib/liveData";
 import { getServers } from "@/lib/serverData";
 import { Server } from "@/types/server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Search, X } from "lucide-react";
+import { Eye, EyeOff, Github, Search, X } from "lucide-react";
+
+type FrontendVersionResponse = {
+  commitHash?: string;
+  shortCommitHash?: string;
+};
+
+type BackendVersionResponse = {
+  version?: string;
+};
+
+function toShortHash(value: string | null): string {
+  if (!value) return "unavailable";
+  if (value === "unknown") return value;
+  return value.slice(0, 7);
+}
 
 export default function Home() {
   const { isConnected, on, off } = useWebSocket();
@@ -21,6 +36,8 @@ export default function Home() {
   const [syncTimestamp, setSyncTimestamp] = useState<number | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [frontendCommitHash, setFrontendCommitHash] = useState<string | null>(null);
+  const [backendCommitHash, setBackendCommitHash] = useState<string | null>(null);
   const manageRef = useRef<HTMLDivElement | null>(null);
 
   // close dropdown when clicking outside
@@ -155,6 +172,58 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function fetchFrontendVersion() {
+      try {
+        const response = await fetch("/api/version", { signal: controller.signal });
+        if (!response.ok) {
+          setFrontendCommitHash("unavailable");
+          return;
+        }
+
+        const payload = (await response.json()) as FrontendVersionResponse;
+        setFrontendCommitHash(payload.shortCommitHash ?? payload.commitHash ?? "unknown");
+      } catch {
+        if (!controller.signal.aborted) {
+          setFrontendCommitHash("unavailable");
+        }
+      }
+    }
+
+    async function fetchBackendVersion() {
+      const backendApiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!backendApiUrl) {
+        setBackendCommitHash("unavailable");
+        return;
+      }
+
+      try {
+        const response = await fetch(`${backendApiUrl}/api/version`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          setBackendCommitHash("unavailable");
+          return;
+        }
+
+        const payload = (await response.json()) as BackendVersionResponse;
+        setBackendCommitHash(payload.version ?? "unknown");
+      } catch {
+        if (!controller.signal.aborted) {
+          setBackendCommitHash("unavailable");
+        }
+      }
+    }
+
+    fetchFrontendVersion();
+    fetchBackendVersion();
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <div className="min-h-screen bg-black p-6 sm:p-8">
       {!isConnected && <LoadingScreen message="Connecting to backend..." />}
@@ -166,6 +235,24 @@ export default function Home() {
               servers={servers.filter((s) => !hiddenMap[s.ip]).length}
               totalPlayers={globalPlayercount}
             />
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
+                Frontend version: <span className="font-mono text-foreground">{toShortHash(frontendCommitHash)}</span>
+              </span>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
+                Backend version: <span className="font-mono text-foreground">{toShortHash(backendCommitHash)}</span>
+              </span>
+              <a
+                href="https://github.com/MineTrackerGG"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-foreground transition-colors hover:bg-white/10"
+                aria-label="MineTrackerGG GitHub"
+              >
+                <Github className="size-3.5" />
+                GitHub
+              </a>
+            </div>
             <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
               <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
               <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />
