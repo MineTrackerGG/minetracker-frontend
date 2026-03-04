@@ -191,8 +191,8 @@ export function Sparkline({
   useEffect(() => {
     if (syncTimestamp == null) {
       clearHoverDot();
-      setTooltip(null);
-      return;
+      const t = setTimeout(() => setTooltip(null), 0);
+      return () => clearTimeout(t);
     }
     if (!isVisible || !timestamps.length || canvasWidth === 0 || values.length < 2) return;
 
@@ -209,7 +209,8 @@ export function Sparkline({
     const y = height - ((values[idx] - min) / range) * height;
 
     drawHoverDot(idx);
-    setTooltip((prev) => (prev?.index === idx ? prev : { index: idx, x, y }));
+    const t = setTimeout(() => setTooltip((prev) => (prev?.index === idx ? prev : { index: idx, x, y })), 0);
+    return () => clearTimeout(t);
   }, [syncTimestamp, isVisible, timestamps, values, canvasWidth, height, yRange, drawHoverDot, clearHoverDot]);
 
   const showTooltip =
