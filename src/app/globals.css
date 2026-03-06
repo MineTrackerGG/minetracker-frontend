@@ -4,37 +4,37 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #262626;
-  --popover-foreground: #fafafa;
-  --primary: #02f45f;
-  --primary-foreground: #171717;
-  --secondary: #262626;
-  --secondary-foreground: #fafafa;
-  --muted: #262626;
-  --muted-foreground: #a1a1a1;
-  --accent: #404040;
-  --accent-foreground: #fafafa;
+  --background: #0b0b0c;
+  --foreground: #fafbff;
+  --card: #0e0e10;
+  --card-foreground: #fafbff;
+  --popover: #161619;
+  --popover-foreground: #fafbff;
+  --primary: #00e13f;
+  --primary-foreground: #0b0b0c;
+  --secondary: #161619;
+  --secondary-foreground: #fafbff;
+  --muted: #161619;
+  --muted-foreground: #787a7f;
+  --accent: #1c1e23;
+  --accent-foreground: #fafbff;
   --destructive: #ff6467;
-  --destructive-foreground: #fafafa;
-  --border: #282828;
-  --input: #343434;
-  --ring: #737373;
-  --chart-1: #02f45f;
+  --destructive-foreground: #fafbff;
+  --border: #1c1e23;
+  --input: #1c1e23;
+  --ring: #787a7f;
+  --chart-1: #00e13f;
   --chart-2: #3efe88;
   --chart-3: #3c8b5a;
   --chart-4: #008f37;
   --chart-5: #a3ffc6;
-  --sidebar: #171717;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #02f45f;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #262626;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #282828;
+  --sidebar: #0e0e10;
+  --sidebar-foreground: #fafbff;
+  --sidebar-primary: #00e13f;
+  --sidebar-primary-foreground: #0b0b0c;
+  --sidebar-accent: #161619;
+  --sidebar-accent-foreground: #fafbff;
+  --sidebar-border: #1c1e23;
   --sidebar-ring: #525252;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -64,37 +64,37 @@
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #262626;
-  --popover-foreground: #fafafa;
-  --primary: #02f45f;
-  --primary-foreground: #171717;
-  --secondary: #262626;
-  --secondary-foreground: #fafafa;
-  --muted: #262626;
-  --muted-foreground: #a1a1a1;
-  --accent: #404040;
-  --accent-foreground: #fafafa;
+  --background: #0b0b0c;
+  --foreground: #fafbff;
+  --card: #0e0e10;
+  --card-foreground: #fafbff;
+  --popover: #161619;
+  --popover-foreground: #fafbff;
+  --primary: #00e13f;
+  --primary-foreground: #0b0b0c;
+  --secondary: #161619;
+  --secondary-foreground: #fafbff;
+  --muted: #161619;
+  --muted-foreground: #787a7f;
+  --accent: #1c1e23;
+  --accent-foreground: #fafbff;
   --destructive: #ff6467;
-  --destructive-foreground: #fafafa;
-  --border: #282828;
-  --input: #343434;
-  --ring: #737373;
-  --chart-1: #02f45f;
+  --destructive-foreground: #fafbff;
+  --border: #1c1e23;
+  --input: #1c1e23;
+  --ring: #787a7f;
+  --chart-1: #00e13f;
   --chart-2: #3efe88;
   --chart-3: #3c8b5a;
   --chart-4: #008f37;
   --chart-5: #a3ffc6;
-  --sidebar: #171717;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #02f45f;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #262626;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #282828;
+  --sidebar: #0e0e10;
+  --sidebar-foreground: #fafbff;
+  --sidebar-primary: #00e13f;
+  --sidebar-primary-foreground: #0b0b0c;
+  --sidebar-accent: #161619;
+  --sidebar-accent-foreground: #fafbff;
+  --sidebar-border: #1c1e23;
   --sidebar-ring: #525252;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -186,4 +186,21 @@
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none; /* Safari and Chrome */
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #4d4d4d;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+::-webkit-scrollbar-corner {
+  background-color: transparent;
 }

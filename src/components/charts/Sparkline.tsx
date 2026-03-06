@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { chartSync } from "@/lib/chartSync";
 
 interface SparklineProps {
   values: number[];
   timestamps: number[];
   height?: number;
   yRange?: { min: number; max: number };
-  syncTimestamp?: number | null;
-  onSyncTimestamp?: (ts: number | null) => void;
   isVisible?: boolean;
 }
 
-type TooltipState = { index: number; x: number; y: number } | null;
+const TOOLTIP_W = 148;
 
 function computeYBounds(values: number[], yRange?: { min: number; max: number }) {
   const rawMin = Math.min(...values);
@@ -30,9 +29,9 @@ function getTrend(values: number[]) {
 }
 
 const COLORS = {
-  up:   { stroke: "rgb(34 197 94)",   fill: "rgba(34,197,94,0.18)"   },
-  down: { stroke: "rgb(59 130 246)",  fill: "rgba(59,130,246,0.18)"  },
-  flat: { stroke: "rgb(148 163 184)", fill: "rgba(148,163,184,0.15)" },
+  up:   { stroke: "#00e13f",              fill: "rgba(0,225,63,0.15)"      },
+  down: { stroke: "rgb(59 130 246)",  fill: "rgba(59,130,246,0.15)"  },
+  flat: { stroke: "rgb(148 163 184)", fill: "rgba(148,163,184,0.12)" },
 };
 
 export function Sparkline({
@@ -40,26 +39,20 @@ export function Sparkline({
   timestamps,
   height = 80,
   yRange,
-  syncTimestamp,
-  onSyncTimestamp,
   isVisible = true,
 }: SparklineProps) {
-  const canvasRef    = useRef<HTMLCanvasElement | null>(null);
-  // Cached base chart pixels — restored before each hover-dot draw so we
-  // never re-run the full chart render on every mouse move.
-  const baseImageRef = useRef<ImageData | null>(null);
-  const rafRef       = useRef<number | null>(null);
-  const [tooltip, setTooltip]       = useState<TooltipState>(null);
+  const canvasRef      = useRef<HTMLCanvasElement | null>(null);
+  const baseImageRef   = useRef<ImageData | null>(null);
+  const rafRef         = useRef<number | null>(null);
+  const syncRafRef     = useRef<number | null>(null);
+  const isHoveringRef  = useRef(false);
   const [canvasWidth, setCanvasWidth] = useState(0);
-
-  // Prevent both vertical and horizontal scroll while the pointer is over the canvas.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const onWheel = (e: WheelEvent) => e.preventDefault();
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheel);
-  }, []);
+  const tooltipRef      = useRef<HTMLDivElement | null>(null);
+  const tooltipValueRef = useRef<HTMLDivElement | null>(null);
+  const tooltipTimeRef  = useRef<HTMLDivElement | null>(null);
+  const tooltipIndexRef = useRef<number>(-1);
+  // Always-current snapshot of the sync handler — updated via useEffect, read in the stable subscription.
+  const syncHandlerRef  = useRef<(ts: number | null) => void>(() => {});
 
   // Track canvas CSS width via ResizeObserver.
   useEffect(() => {
@@ -93,6 +86,17 @@ export function Sparkline({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
+    // Dot grid background.
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    const gridStep = 25;
+    for (let gx = gridStep; gx < width; gx += gridStep) {
+      for (let gy = gridStep; gy < height; gy += gridStep) {
+        ctx.beginPath();
+        ctx.arc(gx, gy, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     const { min, range } = computeYBounds(values, yRange);
     const color = COLORS[getTrend(values)];
 
@@ -113,12 +117,50 @@ export function Sparkline({
     ctx.fillStyle = color.fill;
     ctx.fill();
 
+    // Draw peak indicator.
+    const peakIndex = values.reduce((best, v, i) => v > values[best] ? i : best, 0);
+    const peakValue = values[peakIndex];
+    const peakX = (peakIndex / (values.length - 1)) * width;
+    const peakY = height - ((peakValue - min) / range) * height;
+
+    // Vertical dashed orange line at peak.
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(251,146,60,0.75)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(peakX, 0);
+    ctx.lineTo(peakX, height);
+    ctx.stroke();
+    ctx.restore();
+
+    // Peak value label: fixed near the top of the chart.
+    const label = peakValue.toLocaleString();
+    ctx.font = "bold 11px sans-serif";
+    const labelWidth = ctx.measureText(label).width;
+    const labelX = Math.min(Math.max(peakX, labelWidth / 2 + 2), width - labelWidth / 2 - 2);
+    const labelY = 14;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillText(label, labelX + 1, labelY + 1);
+    ctx.fillStyle = "rgb(251,146,60)";
+    ctx.fillText(label, labelX, labelY);
+
+    // Peak dot.
+    ctx.beginPath();
+    ctx.arc(peakX, peakY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgb(251,146,60)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.4)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
     // Cache the base pixels so each hover-dot draw is a cheap putImageData.
     baseImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
   }, [values, height, canvasWidth, yRange]);
 
-  // Draw a single hover dot directly on canvas — bypasses React render cycle.
-  const drawHoverDot = useCallback((index: number) => {
+  // Draw hover overlay directly on canvas AND update tooltip DOM — zero React renders.
+  const drawHoverDot = useCallback((index: number, rawX: number, rawY: number) => {
     const canvas = canvasRef.current;
     const base   = baseImageRef.current;
     if (!canvas || !base || values.length < 2) return;
@@ -133,27 +175,65 @@ export function Sparkline({
 
     const { min, range } = computeYBounds(values, yRange);
     const color = COLORS[getTrend(values)];
-    const x     = (index / (values.length - 1)) * width;
-    const y     = height - ((values[index] - min) / range) * height;
+    const snapX = (index / (values.length - 1)) * width;
+    const snapY = height - ((values[index] - min) / range) * height;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Smooth vertical crosshair at raw mouse position.
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.moveTo(rawX, 0);
+    ctx.lineTo(rawX, height);
+    ctx.stroke();
+    ctx.restore();
+
+    // Dot at nearest data point.
+    ctx.beginPath();
+    ctx.arc(snapX, snapY, 4, 0, Math.PI * 2);
     ctx.fillStyle = color.stroke;
     ctx.fill();
-  }, [values, height, canvasWidth, yRange]);
+
+    // Update tooltip position imperatively (no React state).
+    const tip = tooltipRef.current;
+    if (tip && isVisible) {
+      const left = rawX + 12 + TOOLTIP_W > width ? rawX - TOOLTIP_W - 4 : rawX + 12;
+      const top  = Math.max(rawY - 36, 4);
+      tip.style.left    = `${left}px`;
+      tip.style.top     = `${top}px`;
+      tip.style.display = "block";
+      // Only update text content when index changes.
+      if (tooltipIndexRef.current !== index) {
+        tooltipIndexRef.current = index;
+        if (tooltipValueRef.current)
+          tooltipValueRef.current.textContent = `${values[index].toLocaleString()} Players`;
+        if (tooltipTimeRef.current) {
+          const ts = timestamps[index];
+          tooltipTimeRef.current.textContent = typeof ts === "number"
+            ? new Date(ts * 1000).toLocaleString()
+            : "--";
+        }
+      }
+    }
+  }, [values, height, canvasWidth, yRange, isVisible, timestamps]);
 
   const clearHoverDot = useCallback(() => {
     const canvas = canvasRef.current;
     const base   = baseImageRef.current;
-    if (!canvas || !base) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.putImageData(base, 0, 0);
+    if (canvas && base) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.putImageData(base, 0, 0);
+    }
+    const tip = tooltipRef.current;
+    if (tip) { tip.style.display = "none"; }
+    tooltipIndexRef.current = -1;
   }, []);
 
   const onMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (values.length === 0) return;
+    isHoveringRef.current = true;
 
     const rect  = e.currentTarget.getBoundingClientRect();
     const x     = e.clientX - rect.left;
@@ -162,82 +242,55 @@ export function Sparkline({
       Math.round((x / rect.width) * (values.length - 1))
     ));
 
-    // Schedule dot draw via RAF — no React re-render.
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
-      drawHoverDot(index);
+      drawHoverDot(index, x, y);
+      // Notify siblings via bus inside RAF — throttled to display rate.
+      if (isVisible) chartSync.notify(timestamps[index] ?? null);
       rafRef.current = null;
     });
-
-    // Update tooltip only when the snapped index changes (minimises re-renders).
-    setTooltip((prev) => (prev?.index === index ? prev : { index, x, y }));
-
-    if (onSyncTimestamp && isVisible) {
-      onSyncTimestamp(timestamps[index] ?? null);
-    }
-  }, [values, timestamps, isVisible, onSyncTimestamp, drawHoverDot]);
+  }, [values, timestamps, isVisible, drawHoverDot]);
 
   const onLeave = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    isHoveringRef.current = false;
     clearHoverDot();
-    setTooltip(null);
-    onSyncTimestamp?.(null);
-  }, [clearHoverDot, onSyncTimestamp]);
+    if (isVisible) chartSync.notify(null);
+  }, [clearHoverDot, isVisible]);
 
-  // Handle an external sync timestamp (hover on a sibling card).
+  // Keep syncHandlerRef current so the stable subscription always uses fresh data.
   useEffect(() => {
-    if (syncTimestamp == null) {
-      clearHoverDot();
-      const t = setTimeout(() => setTooltip(null), 0);
-      return () => clearTimeout(t);
-    }
-    if (!isVisible || !timestamps.length || canvasWidth === 0 || values.length < 2) return;
+    syncHandlerRef.current = (ts: number | null) => {
+      if (!isVisible || !timestamps.length || canvasWidth === 0 || values.length < 2) return;
+      if (ts == null) { clearHoverDot(); return; }
 
-    let bestIdx  = 0;
-    let bestDiff = Infinity;
-    for (let i = 0; i < timestamps.length; i++) {
-      const diff = Math.abs((timestamps[i] ?? 0) - syncTimestamp);
-      if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
-    }
+      let bestIdx = 0, bestDiff = Infinity;
+      for (let i = 0; i < timestamps.length; i++) {
+        const diff = Math.abs((timestamps[i] ?? 0) - ts);
+        if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+      }
+      const idx = Math.max(0, Math.min(values.length - 1, bestIdx));
+      const { min, range } = computeYBounds(values, yRange);
+      const x = (idx / (values.length - 1)) * canvasWidth;
+      const y = height - ((values[idx] - min) / range) * height;
+      drawHoverDot(idx, x, y);
+    };
+  }, [isVisible, timestamps, canvasWidth, values, height, yRange, drawHoverDot, clearHoverDot]);
 
-    const idx = Math.max(0, Math.min(values.length - 1, bestIdx));
-    const { min, range } = computeYBounds(values, yRange);
-    const x = (idx / (values.length - 1)) * canvasWidth;
-    const y = height - ((values[idx] - min) / range) * height;
-
-    drawHoverDot(idx);
-    const t = setTimeout(() => setTooltip((prev) => (prev?.index === idx ? prev : { index: idx, x, y })), 0);
-    return () => clearTimeout(t);
-  }, [syncTimestamp, isVisible, timestamps, values, canvasWidth, height, yRange, drawHoverDot, clearHoverDot]);
-
-  const showTooltip =
-    isVisible &&
-    tooltip !== null &&
-    tooltip.index >= 0 &&
-    tooltip.index < values.length &&
-    typeof values[tooltip.index] === "number";
-
-  const hoveredValue     = showTooltip ? values[tooltip!.index] : undefined;
-  const hoveredTimestamp = showTooltip && tooltip!.index < timestamps.length
-    ? timestamps[tooltip!.index] : undefined;
-
-  const tooltipValueLabel =
-    typeof hoveredValue === "number" ? hoveredValue.toLocaleString() : "--";
-  const tooltipTimestampLabel =
-    typeof hoveredTimestamp === "number"
-      ? new Date(hoveredTimestamp * 1000).toLocaleString()
-      : "--";
-
-  // Approximate tooltip width so we can flip it left when near the right edge.
-  const TOOLTIP_W = 148;
-  const tooltipLeft = showTooltip
-    ? tooltip!.x + 12 + TOOLTIP_W > canvasWidth
-      ? tooltip!.x - TOOLTIP_W - 4
-      : tooltip!.x + 12
-    : 0;
+  // Subscribe once — reads from syncHandlerRef so no re-subscription needed.
+  useEffect(() => {
+    return chartSync.subscribe((ts) => {
+      if (isHoveringRef.current) return; // ignore own notifications
+      if (syncRafRef.current !== null) cancelAnimationFrame(syncRafRef.current);
+      syncRafRef.current = requestAnimationFrame(() => {
+        syncHandlerRef.current(ts);
+        syncRafRef.current = null;
+      });
+    });
+  }, []); // stable — no deps needed
 
   return (
     <div className="relative overflow-hidden">
@@ -248,19 +301,15 @@ export function Sparkline({
         onMouseMove={onMove}
         onMouseLeave={onLeave}
       />
-
-      {showTooltip && (
-        <div
-          className="pointer-events-none absolute z-10 bg-background border rounded-md px-2 py-1 text-xs shadow"
-          style={{
-            left: tooltipLeft,
-            top: Math.max(tooltip!.y - 36, 4),
-          }}
-        >
-          <div className="font-medium">{tooltipValueLabel} Players</div>
-          <div className="text-muted-foreground">{tooltipTimestampLabel}</div>
-        </div>
-      )}
+      {/* Tooltip is updated imperatively — no React state involved in hover */}
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none absolute z-10 bg-background border rounded-md px-2 py-1 text-xs shadow"
+        style={{ display: "none" }}
+      >
+        <div ref={tooltipValueRef} className="font-medium" />
+        <div ref={tooltipTimeRef} className="text-muted-foreground" />
+      </div>
     </div>
   );
 }

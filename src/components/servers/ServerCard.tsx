@@ -21,12 +21,10 @@ interface ServerCardProps {
   timeRange: string;
   hidden?: boolean;
   onToggleHidden?: (ip: string) => void;
-  syncTimestamp?: number | null;
-  onSyncTimestamp?: (ts: number | null) => void;
   position?: number;
 }
 
-function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTimestamp, onSyncTimestamp, position }: ServerCardProps) {
+function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: ServerCardProps) {
   const [dataPoints, setDataPoints] = useState<ServerDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -213,7 +211,6 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
     if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
     if (start === end) return [start];
     
-    // Berechne dynamisch wie viele Labels basierend auf Container-Breite
     const width = containerWidth || 300;
     const minLabelWidth = width < 400 ? 80 : 100;
     const maxLabels = Math.max(2, Math.min(5, Math.floor(width / minLabelWidth)));
@@ -230,7 +227,6 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
     const date = new Date(timestamp);
     
     if (isSmall) {
-      // Nur Uhrzeit für kleine Bildschirme
       return date.toLocaleString(undefined, {
         hour: "2-digit",
         minute: "2-digit",
@@ -248,35 +244,30 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
   const iconSrc = server.icon ?? "/logo/no-icon.png";
 
   return (
-    <Card className="w-full max-w-2xl">
-      <CardContent ref={ref} className="space-y-6 pb-4 pt-6">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="relative h-16 w-16 shrink-0">
+    <Card className="w-full">
+      <CardContent ref={ref} className="p-0">
+        {/* Header */}
+        <div className="flex items-center gap-3 p-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="relative h-10 w-10 shrink-0">
               <Image
                 src={iconSrc}
                 alt={`${server.ip} icon`}
-                width={64}
-                height={64}
-                className="rounded-2xl border border-white/10 bg-black/40"
+                width={40}
+                height={40}
+                className="rounded-xl"
                 unoptimized
               />
             </div>
-            <div className="min-w-0 flex items-center gap-3">
-              {typeof position === "number" && (
-                <div className="shrink-0">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-xs font-semibold text-white">{position}</span>
-                </div>
-              )}
-              <div className="min-w-0">
-                <CardTitle className="truncate text-xl leading-tight">{server.name || server.ip}</CardTitle>
-                <CardDescription className="truncate">{server.ip}</CardDescription>
-              </div>
+            <div className="min-w-0">
+              <CardTitle className="truncate text-base leading-tight">{server.name || server.ip}</CardTitle>
+              <CardDescription className="truncate text-sm">{server.ip}</CardDescription>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
+        {/* Chart area */}
+        <div className="px-4 pb-2">
           {loading || !isConnected || !visible ? (
             <Skeleton className="h-40 w-full" />
           ) : hidden ? (
@@ -307,8 +298,6 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
                     timestamps={sparklineTimestamps}
                     height={150}
                     yRange={yRange}
-                    syncTimestamp={syncTimestamp}
-                    onSyncTimestamp={onSyncTimestamp}
                     isVisible={visible}
                   />
                 </div>
@@ -324,34 +313,32 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden, syncTim
         </div>
       </CardContent>
 
-      <CardFooter className="border-t border-white/5 pt-4">
-        <div className="mx-auto w-fit grid grid-cols-2 divide-x divide-white/10 text-center text-xs text-muted-foreground sm:grid-cols-3 lg:grid-cols-5">
+      <CardFooter className="border-t border-border px-0 pb-0 pt-0">
+        <div className="w-full flex divide-x divide-border text-xs text-muted-foreground">
           {["Current", "Mean", "Min", "Max"].map((label) => {
             const value =
               label === "Current" ? stats.current :
               label === "Mean" ? stats.avg :
               label === "Min" ? stats.min :
-              label === "Max" ? stats.max : server.peak;
-            const colorClass =
+              stats.max;
+            const dotColor =
               label === "Current"
-                ? "bg-green-500"
+                ? "#00e13f"
                 : label === "Mean"
-                  ? "bg-blue-500"
+                  ? "rgb(59,130,246)"
                   : label === "Min"
-                    ? "bg-yellow-500"
-                    : label === "Max"
-                      ? "bg-red-500"
-                      : "bg-purple-500";
+                    ? "rgb(234,179,8)"
+                    : "rgb(251,146,60)";
             return (
-              <div key={label} className="flex flex-col items-center gap-1 px-2 py-1">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${colorClass}`} aria-hidden />
+              <div key={label} className="flex flex-col items-center gap-0.5 px-4 py-3 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} aria-hidden />
                   <span>{label}</span>
                 </div>
                 {loading ? (
                   <Skeleton className="h-6 w-12" />
                 ) : (
-                  <span className="text-lg font-semibold text-white">{value.toLocaleString()}</span>
+                  <span className="text-base font-semibold text-foreground">{value.toLocaleString()}</span>
                 )}
               </div>
             );

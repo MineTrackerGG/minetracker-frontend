@@ -33,7 +33,6 @@ export default function Home() {
   const [sortOption, setSortOption] = useState<SortOption>("most-players");
   const [timeRange, setTimeRange] = useState<TimeOption>("7d");
   const [hiddenMap, setHiddenMap] = useState<Record<string, boolean>>({});
-  const [syncTimestamp, setSyncTimestamp] = useState<number | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [frontendCommitHash, setFrontendCommitHash] = useState<string | null>(null);
@@ -350,8 +349,6 @@ export default function Home() {
                   onToggleHidden={(ip) =>
                     setHiddenMap((prev) => ({ ...prev, [ip]: !prev[ip] }))
                   }
-                  syncTimestamp={syncTimestamp}
-                  onSyncTimestamp={(ts) => setSyncTimestamp(ts)}
                 />
               ))}
           </div>
