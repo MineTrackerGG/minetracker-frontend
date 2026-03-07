@@ -46,6 +46,8 @@ export function Sparkline({
   const rafRef         = useRef<number | null>(null);
   const syncRafRef     = useRef<number | null>(null);
   const isHoveringRef  = useRef(false);
+  const lastHoverRef   = useRef<{ index: number; rawX: number; rawY: number } | null>(null);
+  const lastSyncedTsRef = useRef<number | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(0);
   const tooltipRef      = useRef<HTMLDivElement | null>(null);
   const tooltipValueRef = useRef<HTMLDivElement | null>(null);
@@ -74,7 +76,7 @@ export function Sparkline({
     const canvas = canvasRef.current;
     if (!canvas || values.length < 2 || canvasWidth === 0) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     const dpr   = window.devicePixelRatio || 1;
@@ -165,7 +167,7 @@ export function Sparkline({
     const base   = baseImageRef.current;
     if (!canvas || !base || values.length < 2) return;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     const dpr   = window.devicePixelRatio || 1;
@@ -223,7 +225,7 @@ export function Sparkline({
     const canvas = canvasRef.current;
     const base   = baseImageRef.current;
     if (canvas && base) {
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (ctx) ctx.putImageData(base, 0, 0);
     }
     const tip = tooltipRef.current;
@@ -242,6 +244,8 @@ export function Sparkline({
       Math.round((x / rect.width) * (values.length - 1))
     ));
 
+    lastHoverRef.current = { index, rawX: x, rawY: y };
+
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       drawHoverDot(index, x, y);
@@ -257,9 +261,21 @@ export function Sparkline({
       rafRef.current = null;
     }
     isHoveringRef.current = false;
+    lastHoverRef.current = null;
     clearHoverDot();
     if (isVisible) chartSync.notify(null);
   }, [clearHoverDot, isVisible]);
+
+  // After the base chart redraws, re-apply hover overlay if user is still hovering
+  // or a synced hover is active on this sibling chart.
+  useEffect(() => {
+    if (isHoveringRef.current && lastHoverRef.current) {
+      const { index, rawX, rawY } = lastHoverRef.current;
+      drawHoverDot(index, rawX, rawY);
+    } else if (!isHoveringRef.current && lastSyncedTsRef.current !== null) {
+      syncHandlerRef.current(lastSyncedTsRef.current);
+    }
+  }, [values, height, canvasWidth, yRange, drawHoverDot]);
 
   // Keep syncHandlerRef current so the stable subscription always uses fresh data.
   useEffect(() => {
@@ -284,6 +300,7 @@ export function Sparkline({
   useEffect(() => {
     return chartSync.subscribe((ts) => {
       if (isHoveringRef.current) return; // ignore own notifications
+      lastSyncedTsRef.current = ts;
       if (syncRafRef.current !== null) cancelAnimationFrame(syncRafRef.current);
       syncRafRef.current = requestAnimationFrame(() => {
         syncHandlerRef.current(ts);

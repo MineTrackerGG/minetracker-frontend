@@ -201,8 +201,9 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
       max: s.max,
       min: s.min === Infinity ? 0 : s.min,
       avg: s.count ? Math.round(s.sum / s.count) : 0,
+      alltime: server.peak ?? 0,
     };
-  }, [dataPoints]);
+  }, [dataPoints, server.peak]);
 
   const xTicks = useMemo(() => {
     if (dataPoints.length === 0) return [];
@@ -314,12 +315,13 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
       </CardContent>
 
       <CardFooter className="border-t border-border px-0 pb-0 pt-0">
-        <div className="w-full flex divide-x divide-border text-xs text-muted-foreground">
-          {["Current", "Mean", "Min", "Max"].map((label) => {
+        <div className="w-full grid grid-cols-3 sm:grid-cols-5 text-xs text-muted-foreground *:border-border *:border-r *:border-b [&>*:nth-child(3n)]:border-r-0 [&>*:last-child]:border-r-0 [&>*:nth-child(n+4)]:border-b-0 sm:*:border-r sm:[&>*:last-child]:border-r-0 sm:*:border-b-0">
+          {["Current", "Mean", "Min", "Max", "Alltime"].map((label) => {
             const value =
               label === "Current" ? stats.current :
               label === "Mean" ? stats.avg :
               label === "Min" ? stats.min :
+              label === "Alltime" ? stats.alltime :
               stats.max;
             const dotColor =
               label === "Current"
@@ -328,9 +330,13 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
                   ? "rgb(59,130,246)"
                   : label === "Min"
                     ? "rgb(234,179,8)"
-                    : "rgb(251,146,60)";
+                    : label === "Max"
+                      ? "rgb(239,68,68)"
+                      : label === "Alltime"
+                        ? "rgb(168,85,247)"
+                        : "rgb(251,146,60)"
             return (
-              <div key={label} className="flex flex-col items-center gap-0.5 px-4 py-3 flex-1">
+              <div key={label} className="flex flex-col items-center gap-0.5 px-2 sm:px-4 py-3">
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} aria-hidden />
                   <span>{label}</span>
@@ -338,7 +344,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
                 {loading ? (
                   <Skeleton className="h-6 w-12" />
                 ) : (
-                  <span className="text-base font-semibold text-foreground">{value.toLocaleString()}</span>
+                  <span className="text-sm sm:text-base font-semibold text-foreground">{value.toLocaleString()}</span>
                 )}
               </div>
             );
