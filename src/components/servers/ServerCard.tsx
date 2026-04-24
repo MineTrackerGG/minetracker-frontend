@@ -12,9 +12,72 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import React from "react";
 
 import { Sparkline } from "@/components/charts/Sparkline";
-import { useSparklineData } from "@/hooks/useSparklineData";
+import { downsampleSparklineData, useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
 import { livePointToServerDataPoint, parseLiveDataPayload } from "@/lib/liveData";
+
+function parseTimeRangeToMs(timeRange: string) {
+  const value = Number.parseInt(timeRange, 10);
+  if (!Number.isFinite(value) || value <= 0) return 24 * 60 * 60 * 1000;
+
+  if (timeRange.endsWith("h")) return value * 60 * 60 * 1000;
+  if (timeRange.endsWith("d")) return value * 24 * 60 * 60 * 1000;
+  if (timeRange.endsWith("y")) return value * 365 * 24 * 60 * 60 * 1000;
+
+  return 24 * 60 * 60 * 1000;
+}
+
+function getSparklinePointBudget(width: number, timeRange: string) {
+  const safeWidth = Math.max(240, width || 320);
+  const rangeMs = parseTimeRangeToMs(timeRange);
+  const oneDay = 24 * 60 * 60 * 1000;
+  const oneWeek = 7 * oneDay;
+  const oneMonth = 30 * oneDay;
+
+  const density = rangeMs <= oneDay
+    ? 0.8
+    : rangeMs <= oneWeek
+      ? 0.55
+      : rangeMs <= oneMonth
+        ? 0.35
+        : 0.24;
+
+  return Math.max(40, Math.min(420, Math.round(safeWidth * density)));
+}
+
+function getRetentionPointLimit(timeRange: string) {
+  const rangeMs = parseTimeRangeToMs(timeRange);
+  const oneDay = 24 * 60 * 60 * 1000;
+  const oneWeek = 7 * oneDay;
+  const oneMonth = 30 * oneDay;
+
+  if (rangeMs <= oneDay) return 1800;
+  if (rangeMs <= oneWeek) return 2400;
+  if (rangeMs <= oneMonth) return 3200;
+  return 4200;
+}
+
+function getTickIntervalMs(rangeMs: number, maxLabels: number) {
+  const target = Math.max(1, Math.floor(rangeMs / Math.max(2, maxLabels - 1)));
+  const candidates = [
+    15 * 60 * 1000,
+    30 * 60 * 1000,
+    60 * 60 * 1000,
+    2 * 60 * 60 * 1000,
+    4 * 60 * 60 * 1000,
+    6 * 60 * 60 * 1000,
+    12 * 60 * 60 * 1000,
+    24 * 60 * 60 * 1000,
+    2 * 24 * 60 * 60 * 1000,
+    7 * 24 * 60 * 60 * 1000,
+    14 * 24 * 60 * 60 * 1000,
+    30 * 24 * 60 * 60 * 1000,
+    60 * 24 * 60 * 60 * 1000,
+    90 * 24 * 60 * 60 * 1000,
+  ];
+
+  return candidates.find((candidate) => candidate >= target) ?? candidates[candidates.length - 1];
+}
 
 interface ServerCardProps {
   server: Server;
@@ -91,6 +154,11 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
 
 
   useEffect(() => {
+    const retentionLimit = getRetentionPointLimit(timeRange);
+    maxDataPointsRef.current = retentionLimit;
+  }, [timeRange]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       if (bufferRef.current.length === 0) return;
 
@@ -157,7 +225,9 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
           count: clean.length,
         };
 
-        setDataPoints(clean);
+        const retentionLimit = getRetentionPointLimit(timeRange);
+        maxDataPointsRef.current = retentionLimit;
+        setDataPoints(downsampleSparklineData(clean, retentionLimit));
       } catch (e) {
         console.error(e);
       } finally {
@@ -168,7 +238,12 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     fetchData();
   }, [server.ip, timeRange]);
 
-  const sparklinePoints = useSparklineData(dataPoints, 50);
+  const sparklinePointBudget = useMemo(
+    () => getSparklinePointBudget(containerWidth, timeRange),
+    [containerWidth, timeRange],
+  );
+
+  const sparklinePoints = useSparklineData(dataPoints, sparklinePointBudget);
   const sparklineValues = sparklinePoints.map((point) => point.player_count);
   const sparklineTimestamps = sparklinePoints.map((point) => Number(point.timestamp));
 
@@ -182,7 +257,11 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
 
     const rawMin = Math.min(...sparklineValues);
     const rawMax = Math.max(...sparklineValues);
-    const padding = Math.max((rawMax - rawMin) * 0.12, 1);
+    const spread = rawMax - rawMin;
+    const dynamicPadding = spread === 0
+      ? Math.max(2, rawMax * 0.1)
+      : spread * 0.15;
+    const padding = Math.max(dynamicPadding, 1);
     const min = Math.max(0, rawMin - padding);
     const max = rawMax + padding;
     const steps = 4;
@@ -211,36 +290,57 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     const end = Number(dataPoints.at(-1)?.timestamp) * 1000;
     if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
     if (start === end) return [start];
-    
+
     const width = containerWidth || 300;
-    const minLabelWidth = width < 400 ? 80 : 100;
-    const maxLabels = Math.max(2, Math.min(5, Math.floor(width / minLabelWidth)));
-    const divisions = maxLabels - 1;
-    
-    const interval = (end - start) / divisions;
-    return Array.from({ length: divisions + 1 }, (_, idx) =>
-      Math.round(start + interval * idx),
-    );
+    const rangeMs = end - start;
+    const minLabelWidth = width < 400 ? 95 : 130;
+    const maxLabels = Math.max(2, Math.min(7, Math.floor(width / minLabelWidth)));
+    const intervalMs = getTickIntervalMs(rangeMs, maxLabels);
+
+    const ticks: number[] = [start];
+    let cursor = Math.ceil(start / intervalMs) * intervalMs;
+
+    while (cursor < end && ticks.length < maxLabels - 1) {
+      if (cursor > start) ticks.push(cursor);
+      cursor += intervalMs;
+    }
+
+    if (ticks[ticks.length - 1] !== end) {
+      ticks.push(end);
+    }
+
+    return ticks;
   }, [dataPoints, containerWidth]);
 
   const formatTickLabel = useCallback((timestamp: number, isSmall: boolean) => {
     if (!timestamp) return "--";
     const date = new Date(timestamp);
-    
-    if (isSmall) {
+
+    const rangeMs = parseTimeRangeToMs(timeRange);
+    const oneDay = 24 * 60 * 60 * 1000;
+    const oneMonth = 30 * oneDay;
+
+    if (rangeMs <= oneDay && isSmall) {
       return date.toLocaleString(undefined, {
         hour: "2-digit",
         minute: "2-digit",
       });
     }
-    
+
+    if (rangeMs > oneMonth) {
+      return date.toLocaleString(undefined, {
+        month: "short",
+        day: "2-digit",
+      });
+    }
+
     return date.toLocaleString(undefined, {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
     });
-  }, []);
+  }, [timeRange]);
 
   const iconSrc = server.icon ?? "/logo/no-icon.png";
 
