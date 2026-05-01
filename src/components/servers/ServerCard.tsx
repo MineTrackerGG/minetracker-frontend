@@ -45,16 +45,42 @@ function getSparklinePointBudget(width: number, timeRange: string) {
   return Math.max(40, Math.min(420, Math.round(safeWidth * density)));
 }
 
-function getRetentionPointLimit(timeRange: string) {
-  const rangeMs = parseTimeRangeToMs(timeRange);
-  const oneDay = 24 * 60 * 60 * 1000;
-  const oneWeek = 7 * oneDay;
-  const oneMonth = 30 * oneDay;
+function trimPointsToTimeRange(dataPoints: ServerDataPoint[], timeRange: string): ServerDataPoint[] {
+  if (dataPoints.length === 0) return dataPoints;
 
-  if (rangeMs <= oneDay) return 1800;
-  if (rangeMs <= oneWeek) return 2400;
-  if (rangeMs <= oneMonth) return 3200;
-  return 4200;
+  const rangeSeconds = Math.floor(parseTimeRangeToMs(timeRange) / 1000);
+  const latestTimestamp = Number(dataPoints[dataPoints.length - 1]?.timestamp);
+
+  if (!Number.isFinite(latestTimestamp)) {
+    return dataPoints;
+  }
+
+  const cutoff = latestTimestamp - rangeSeconds;
+  return dataPoints.filter((point) => Number(point.timestamp) >= cutoff);
+}
+
+function calculateStats(points: ServerDataPoint[]) {
+  if (points.length === 0) {
+    return { current: 0, max: 0, min: 0, sum: 0, count: 0 };
+  }
+
+  let max = 0;
+  let min = Infinity;
+  let sum = 0;
+
+  for (const point of points) {
+    max = Math.max(max, point.player_count);
+    min = Math.min(min, point.player_count);
+    sum += point.player_count;
+  }
+
+  return {
+    current: points[points.length - 1]?.player_count ?? 0,
+    max,
+    min: min === Infinity ? 0 : min,
+    sum,
+    count: points.length,
+  };
 }
 
 function getTickIntervalMs(rangeMs: number, maxLabels: number) {
@@ -93,8 +119,8 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
 
   const { isConnected, on, off, send } = useWebSocket();
 
-  const maxDataPointsRef = useRef(1000);
   const bufferRef = useRef<ServerDataPoint[]>([]);
+  const liveAggregationRef = useRef<Map<number, { sum: number; count: number; ip: string; name: string }>>(new Map());
   const xAxisRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -154,40 +180,79 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
 
 
   useEffect(() => {
-    const retentionLimit = getRetentionPointLimit(timeRange);
-    maxDataPointsRef.current = retentionLimit;
-  }, [timeRange]);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       if (bufferRef.current.length === 0) return;
 
       setDataPoints((prev) => {
         const next = [...prev];
+        const touchedTimestamps = new Set<number>();
 
         for (const p of bufferRef.current) {
-          if (next.some((d) => d.timestamp === p.timestamp)) continue;
+          const ts = Number(p.timestamp);
+          if (!Number.isFinite(ts)) continue;
 
-          next.push(p);
+          const existingAgg = liveAggregationRef.current.get(ts);
+          if (existingAgg) {
+            existingAgg.sum += p.player_count;
+            existingAgg.count += 1;
+            existingAgg.name = p.name;
+            existingAgg.ip = p.ip;
+          } else {
+            liveAggregationRef.current.set(ts, {
+              sum: p.player_count,
+              count: 1,
+              name: p.name,
+              ip: p.ip,
+            });
+          }
 
-          statsRef.current.current = p.player_count;
-          statsRef.current.max = Math.max(statsRef.current.max, p.player_count);
-          statsRef.current.min = Math.min(statsRef.current.min, p.player_count);
-          statsRef.current.sum += p.player_count;
-          statsRef.current.count += 1;
+          touchedTimestamps.add(ts);
+        }
+
+        for (const ts of touchedTimestamps) {
+          const agg = liveAggregationRef.current.get(ts);
+          if (!agg || agg.count <= 0) continue;
+
+          const point: ServerDataPoint = {
+            timestamp: ts,
+            player_count: Math.round(agg.sum / agg.count),
+            ip: agg.ip,
+            name: agg.name,
+          };
+
+          const existingIndex = next.findIndex((d) => Number(d.timestamp) === ts);
+          if (existingIndex >= 0) {
+            next[existingIndex] = point;
+          } else {
+            next.push(point);
+          }
         }
 
         bufferRef.current = [];
 
         next.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-        return next.slice(-maxDataPointsRef.current);
+        const trimmed = trimPointsToTimeRange(next, timeRange);
+
+        if (trimmed.length === 0) {
+          liveAggregationRef.current.clear();
+        } else {
+          const minKeptTimestamp = Number(trimmed[0].timestamp);
+          for (const ts of liveAggregationRef.current.keys()) {
+            if (ts < minKeptTimestamp) {
+              liveAggregationRef.current.delete(ts);
+            }
+          }
+        }
+
+        statsRef.current = calculateStats(trimmed);
+        return trimmed;
       });
 
       forceUpdate((v) => v + 1);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [timeRange]);
 
   useEffect(() => {
     const updateWidth = () => {
@@ -205,9 +270,12 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     const fetchData = async () => {
       setLoading(true);
       try {
+        liveAggregationRef.current.clear();
+
         const res = await getDataPoints(server.ip, timeRange);
 
-        const clean = res.data
+        const clean = trimPointsToTimeRange(
+          res.data
           .filter(
             (p) =>
               p.player_count != null &&
@@ -215,19 +283,12 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
               p.player_count <= 100000 &&
               p.timestamp != null,
           )
-          .sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+          .sort((a, b) => Number(a.timestamp) - Number(b.timestamp)),
+          timeRange,
+        );
 
-        statsRef.current = {
-          current: clean.at(-1)?.player_count ?? 0,
-          max: Math.max(0, ...clean.map((p) => p.player_count)),
-          min: clean.length > 0 ? Math.min(...clean.map((p) => p.player_count)) : 0,
-          sum: clean.reduce((s, p) => s + p.player_count, 0),
-          count: clean.length,
-        };
-
-        const retentionLimit = getRetentionPointLimit(timeRange);
-        maxDataPointsRef.current = retentionLimit;
-        setDataPoints(downsampleSparklineData(clean, retentionLimit));
+        statsRef.current = calculateStats(clean);
+        setDataPoints(clean);
       } catch (e) {
         console.error(e);
       } finally {
