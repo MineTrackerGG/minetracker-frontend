@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { getDataPoints } from "@/lib/serverData";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardTitle } from "../ui/card";
 import { Server, ServerDataPoint } from "@/types/server";
@@ -12,9 +11,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import React from "react";
 
 import { Sparkline } from "@/components/charts/Sparkline";
-import { downsampleSparklineData, useSparklineData } from "@/hooks/useSparklineData";
 import { useVisible } from "@/hooks/useVisible";
-import { livePointToServerDataPoint, parseLiveDataPayload } from "@/lib/liveData";
 
 function parseTimeRangeToMs(timeRange: string) {
   const value = Number.parseInt(timeRange, 10);
@@ -25,38 +22,6 @@ function parseTimeRangeToMs(timeRange: string) {
   if (timeRange.endsWith("y")) return value * 365 * 24 * 60 * 60 * 1000;
 
   return 24 * 60 * 60 * 1000;
-}
-
-function getSparklinePointBudget(width: number, timeRange: string) {
-  const safeWidth = Math.max(240, width || 320);
-  const rangeMs = parseTimeRangeToMs(timeRange);
-  const oneDay = 24 * 60 * 60 * 1000;
-  const oneWeek = 7 * oneDay;
-  const oneMonth = 30 * oneDay;
-
-  const density = rangeMs <= oneDay
-    ? 0.8
-    : rangeMs <= oneWeek
-      ? 0.55
-      : rangeMs <= oneMonth
-        ? 0.35
-        : 0.24;
-
-  return Math.max(40, Math.min(420, Math.round(safeWidth * density)));
-}
-
-function trimPointsToTimeRange(dataPoints: ServerDataPoint[], timeRange: string): ServerDataPoint[] {
-  if (dataPoints.length === 0) return dataPoints;
-
-  const rangeSeconds = Math.floor(parseTimeRangeToMs(timeRange) / 1000);
-  const latestTimestamp = Number(dataPoints[dataPoints.length - 1]?.timestamp);
-
-  if (!Number.isFinite(latestTimestamp)) {
-    return dataPoints;
-  }
-
-  const cutoff = latestTimestamp - rangeSeconds;
-  return dataPoints.filter((point) => Number(point.timestamp) >= cutoff);
 }
 
 function calculateStats(points: ServerDataPoint[]) {
@@ -116,13 +81,22 @@ interface ServerCardProps {
 function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: ServerCardProps) {
   const [dataPoints, setDataPoints] = useState<ServerDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const { isConnected, on, off, send } = useWebSocket();
 
-  const bufferRef = useRef<ServerDataPoint[]>([]);
-  const liveAggregationRef = useRef<Map<number, { sum: number; count: number; ip: string; name: string }>>(new Map());
   const xAxisRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+
+  const subscriptionRef = useRef<{
+    id: string | null;
+    lastSequence: number;
+    dedupeSet: Set<string>;
+  }>({
+    id: null,
+    lastSequence: -1,
+    dedupeSet: new Set(),
+  });
 
   const statsRef = useRef({
     current: 0,
@@ -132,29 +106,117 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     count: 0,
   });
 
-  const [, forceUpdate] = useState(0);
   const { ref, visible } = useVisible<HTMLDivElement>();
 
-  const enqueueLivePoint = useCallback((rawPoint: unknown) => {
-    const parsed = parseLiveDataPayload(rawPoint);
-    if (!parsed || parsed.ip !== server.ip) {
-      return;
-    }
-
-    bufferRef.current.push(livePointToServerDataPoint(parsed));
-  }, [server.ip]);
+  const resetStats = useCallback(() => {
+    statsRef.current = {
+      current: 0,
+      max: 0,
+      min: Infinity,
+      sum: 0,
+      count: 0,
+    };
+  }, []);
 
   useEffect(() => {
-    const handleRealtimePoint = (data: any) => {
-      if (!data?.data) {
+    const handleSubscriptionAck = (payload: any) => {
+      if (payload?.ip !== server.ip) return;
+      subscriptionRef.current.id = payload.subscription_id;
+      subscriptionRef.current.lastSequence = payload.sequence ?? 0;
+      setError(null);
+    };
+
+    on("subscription_ack", handleSubscriptionAck);
+    return () => off("subscription_ack", handleSubscriptionAck);
+  }, [on, off, server.ip]);
+
+  useEffect(() => {
+    const handleSubscriptionError = (payload: any) => {
+      if (payload?.ip !== server.ip) return;
+      const errorMsg = payload.error ?? `Subscription error: ${payload.code}`;
+      setError(errorMsg);
+      setLoading(false);
+    };
+
+    on("subscription_error", handleSubscriptionError);
+    return () => off("subscription_error", handleSubscriptionError);
+  }, [on, off, server.ip]);
+
+  useEffect(() => {
+    const handleInitialData = (payload: any) => {
+      if (payload?.ip !== server.ip || !Array.isArray(payload?.data)) {
         return;
       }
 
-      if (data.data.ip !== server.ip) {
+      subscriptionRef.current.lastSequence = payload.sequence ?? 0;
+      subscriptionRef.current.dedupeSet.clear();
+
+      const initialPoints = payload.data as ServerDataPoint[];
+      statsRef.current = calculateStats(initialPoints);
+      setDataPoints(initialPoints);
+      setError(null);
+      setLoading(false);
+    };
+
+    on("initial_data", handleInitialData);
+
+    return () => {
+      off("initial_data", handleInitialData);
+    };
+  }, [on, off, server.ip]);
+
+  useEffect(() => {
+    const handleRealtimePoint = (payload: any) => {
+      const rawPoint = payload?.data;
+      if (!rawPoint) {
         return;
       }
 
-      enqueueLivePoint(data.data);
+      const rawIp = payload?.ip ?? rawPoint?.ip;
+      if (rawIp !== server.ip) {
+        return;
+      }
+
+      const eventId = payload?.event_id;
+      const isCorrection = payload?.is_correction ?? false;
+      const sequence = payload?.sequence ?? 0;
+
+      if (eventId && subscriptionRef.current.dedupeSet.has(eventId)) {
+        return;
+      }
+
+      if (sequence <= subscriptionRef.current.lastSequence && sequence > 0) {
+        console.warn(`[${server.ip}] Out-of-order sequence: ${sequence} (expected > ${subscriptionRef.current.lastSequence})`);
+        return;
+      }
+
+      subscriptionRef.current.lastSequence = Math.max(subscriptionRef.current.lastSequence, sequence);
+      if (eventId) {
+        subscriptionRef.current.dedupeSet.add(eventId);
+      }
+
+      const point = rawPoint as ServerDataPoint;
+
+      setDataPoints((prev) => {
+        let next: ServerDataPoint[];
+
+        if (isCorrection && prev.length > 0) {
+          const lastTs = Number(prev[prev.length - 1]?.timestamp);
+          const pointTs = Number(point.timestamp);
+          if (lastTs === pointTs) {
+            next = [...prev.slice(0, -1), point];
+          } else {
+            next = [...prev, point];
+          }
+        } else {
+          next = [...prev, point];
+        }
+
+        statsRef.current = calculateStats(next);
+        return next;
+      });
+
+      setLoading(false);
     };
 
     on("data_point_rt", handleRealtimePoint);
@@ -162,12 +224,19 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     return () => {
       off("data_point_rt", handleRealtimePoint);
     };
-  }, [enqueueLivePoint, on, off]);
+  }, [on, off, server.ip]);
 
   useEffect(() => {
+    setLoading(true);
+    setDataPoints([]);
+    setError(null);
+    resetStats();
+    subscriptionRef.current = { id: null, lastSequence: -1, dedupeSet: new Set() };
+
     send({
       type: "subscribe_server",
       ip: server.ip,
+      time_range: timeRange,
     });
 
     return () => {
@@ -176,83 +245,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
         ip: server.ip,
       });
     };
-  }, [server.ip]);
-
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (bufferRef.current.length === 0) return;
-
-      setDataPoints((prev) => {
-        const next = [...prev];
-        const touchedTimestamps = new Set<number>();
-
-        for (const p of bufferRef.current) {
-          const ts = Number(p.timestamp);
-          if (!Number.isFinite(ts)) continue;
-
-          const existingAgg = liveAggregationRef.current.get(ts);
-          if (existingAgg) {
-            existingAgg.sum += p.player_count;
-            existingAgg.count += 1;
-            existingAgg.name = p.name;
-            existingAgg.ip = p.ip;
-          } else {
-            liveAggregationRef.current.set(ts, {
-              sum: p.player_count,
-              count: 1,
-              name: p.name,
-              ip: p.ip,
-            });
-          }
-
-          touchedTimestamps.add(ts);
-        }
-
-        for (const ts of touchedTimestamps) {
-          const agg = liveAggregationRef.current.get(ts);
-          if (!agg || agg.count <= 0) continue;
-
-          const point: ServerDataPoint = {
-            timestamp: ts,
-            player_count: Math.round(agg.sum / agg.count),
-            ip: agg.ip,
-            name: agg.name,
-          };
-
-          const existingIndex = next.findIndex((d) => Number(d.timestamp) === ts);
-          if (existingIndex >= 0) {
-            next[existingIndex] = point;
-          } else {
-            next.push(point);
-          }
-        }
-
-        bufferRef.current = [];
-
-        next.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-        const trimmed = trimPointsToTimeRange(next, timeRange);
-
-        if (trimmed.length === 0) {
-          liveAggregationRef.current.clear();
-        } else {
-          const minKeptTimestamp = Number(trimmed[0].timestamp);
-          for (const ts of liveAggregationRef.current.keys()) {
-            if (ts < minKeptTimestamp) {
-              liveAggregationRef.current.delete(ts);
-            }
-          }
-        }
-
-        statsRef.current = calculateStats(trimmed);
-        return trimmed;
-      });
-
-      forceUpdate((v) => v + 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [server.ip, timeRange, send, resetStats]);
 
   useEffect(() => {
     const updateWidth = () => {
@@ -266,45 +259,7 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     return () => window.removeEventListener('resize', updateWidth);
   }, [visible]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        liveAggregationRef.current.clear();
-
-        const res = await getDataPoints(server.ip, timeRange);
-
-        const clean = trimPointsToTimeRange(
-          res.data
-          .filter(
-            (p) =>
-              p.player_count != null &&
-              p.player_count >= 0 &&
-              p.player_count <= 100000 &&
-              p.timestamp != null,
-          )
-          .sort((a, b) => Number(a.timestamp) - Number(b.timestamp)),
-          timeRange,
-        );
-
-        statsRef.current = calculateStats(clean);
-        setDataPoints(clean);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [server.ip, timeRange]);
-
-  const sparklinePointBudget = useMemo(
-    () => getSparklinePointBudget(containerWidth, timeRange),
-    [containerWidth, timeRange],
-  );
-
-  const sparklinePoints = useSparklineData(dataPoints, sparklinePointBudget);
+  const sparklinePoints = dataPoints;
   const sparklineValues = sparklinePoints.map((point) => point.player_count);
   const sparklineTimestamps = sparklinePoints.map((point) => Number(point.timestamp));
 
@@ -430,7 +385,14 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
 
         {/* Chart area */}
         <div className="px-4 pb-2">
-          {loading || !isConnected || !visible ? (
+          {error ? (
+            <div className="h-40 flex items-center justify-center">
+              <div className="text-center text-sm text-destructive">
+                <div className="font-medium">Error</div>
+                <div className="text-xs text-muted-foreground mt-1">{error}</div>
+              </div>
+            </div>
+          ) : loading || !isConnected || !visible ? (
             <Skeleton className="h-40 w-full" />
           ) : hidden ? (
             <div className="h-40 flex items-center justify-center">

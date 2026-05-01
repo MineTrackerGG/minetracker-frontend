@@ -11,6 +11,25 @@ interface SparklineProps {
 
 const TOOLTIP_W = 148;
 
+function getXAtIndex(timestamps: number[], index: number, width: number, total: number) {
+  const firstTs = timestamps[0];
+  const lastTs = timestamps[timestamps.length - 1];
+  const span = (lastTs ?? 0) - (firstTs ?? 0);
+  const ts = timestamps[index];
+
+  if (
+    Number.isFinite(firstTs) &&
+    Number.isFinite(lastTs) &&
+    Number.isFinite(ts) &&
+    span > 0
+  ) {
+    return ((ts - firstTs) / span) * width;
+  }
+
+  if (total <= 1) return 0;
+  return (index / (total - 1)) * width;
+}
+
 function computeYBounds(values: number[], yRange?: { min: number; max: number }) {
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -104,7 +123,7 @@ export function Sparkline({
 
     ctx.beginPath();
     values.forEach((v, i) => {
-      const x = (i / (values.length - 1)) * width;
+      const x = getXAtIndex(timestamps, i, width, values.length);
       const y = height - ((v - min) / range) * height;
       if (i === 0) ctx.moveTo(x, y);
       else         ctx.lineTo(x, y);
@@ -122,7 +141,7 @@ export function Sparkline({
     // Draw peak indicator.
     const peakIndex = values.reduce((best, v, i) => v > values[best] ? i : best, 0);
     const peakValue = values[peakIndex];
-    const peakX = (peakIndex / (values.length - 1)) * width;
+    const peakX = getXAtIndex(timestamps, peakIndex, width, values.length);
     const peakY = height - ((peakValue - min) / range) * height;
 
     // Vertical dashed orange line at peak.
@@ -159,7 +178,7 @@ export function Sparkline({
 
     // Cache the base pixels so each hover-dot draw is a cheap putImageData.
     baseImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  }, [values, height, canvasWidth, yRange]);
+  }, [values, timestamps, height, canvasWidth, yRange]);
 
   // Draw hover overlay directly on canvas AND update tooltip DOM — zero React renders.
   const drawHoverDot = useCallback((index: number, rawX: number, rawY: number) => {
@@ -177,7 +196,7 @@ export function Sparkline({
 
     const { min, range } = computeYBounds(values, yRange);
     const color = COLORS[getTrend(values)];
-    const snapX = (index / (values.length - 1)) * width;
+    const snapX = getXAtIndex(timestamps, index, width, values.length);
     const snapY = height - ((values[index] - min) / range) * height;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -240,9 +259,18 @@ export function Sparkline({
     const rect  = e.currentTarget.getBoundingClientRect();
     const x     = e.clientX - rect.left;
     const y     = e.clientY - rect.top;
-    const index = Math.max(0, Math.min(values.length - 1,
-      Math.round((x / rect.width) * (values.length - 1))
-    ));
+    const width = rect.width;
+    let index = 0;
+    let bestDiff = Infinity;
+
+    for (let i = 0; i < values.length; i++) {
+      const px = getXAtIndex(timestamps, i, width, values.length);
+      const diff = Math.abs(px - x);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        index = i;
+      }
+    }
 
     lastHoverRef.current = { index, rawX: x, rawY: y };
 
@@ -290,7 +318,7 @@ export function Sparkline({
       }
       const idx = Math.max(0, Math.min(values.length - 1, bestIdx));
       const { min, range } = computeYBounds(values, yRange);
-      const x = (idx / (values.length - 1)) * canvasWidth;
+      const x = getXAtIndex(timestamps, idx, canvasWidth, values.length);
       const y = height - ((values[idx] - min) / range) * height;
       drawHoverDot(idx, x, y);
     };

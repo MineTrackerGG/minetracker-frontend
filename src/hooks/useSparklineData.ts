@@ -13,12 +13,24 @@ export function downsampleSparklineData(
     return dataPoints;
   }
 
-  const first = dataPoints[0];
-  const last = dataPoints[dataPoints.length - 1];
-  const interior = dataPoints.slice(1, -1);
+  // Keep a live tail untouched so the newest points are not flattened by bucketing.
+  const tailKeep = clamp(Math.floor(maxPoints * 0.22), 8, 64);
+  const canSplit = dataPoints.length > tailKeep + 2 && maxPoints > tailKeep + 2;
+
+  const source = canSplit ? dataPoints.slice(0, -tailKeep) : dataPoints;
+  const tail = canSplit ? dataPoints.slice(-tailKeep) : [];
+
+  const first = source[0];
+  const last = source[source.length - 1];
+  const interior = source.slice(1, -1);
+
+  if (source.length <= 2) {
+    return [...source, ...tail].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  }
 
   // Each bucket contributes up to 2 points (min and max), plus first/last.
-  const bucketCount = clamp(Math.floor((maxPoints - 2) / 2), 1, interior.length);
+  const headBudget = canSplit ? Math.max(3, maxPoints - tail.length) : maxPoints;
+  const bucketCount = clamp(Math.floor((headBudget - 2) / 2), 1, interior.length);
   const bucketSize = interior.length / bucketCount;
 
   const sampled: ServerDataPoint[] = [first];
@@ -53,21 +65,21 @@ export function downsampleSparklineData(
     sampled.push(last);
   }
 
-  sampled.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  const combined = [...sampled, ...tail].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
 
   // Hard-cap in case of timestamp collisions causing more than expected points.
-  if (sampled.length <= maxPoints) {
-    return sampled;
+  if (combined.length <= maxPoints) {
+    return combined;
   }
 
   const evenlySpaced: ServerDataPoint[] = [];
-  const step = (sampled.length - 1) / (maxPoints - 1);
+  const step = (combined.length - 1) / (maxPoints - 1);
   for (let i = 0; i < maxPoints; i++) {
-    evenlySpaced.push(sampled[Math.round(i * step)]);
+    evenlySpaced.push(combined[Math.round(i * step)]);
   }
 
-  evenlySpaced[0] = first;
-  evenlySpaced[evenlySpaced.length - 1] = last;
+  evenlySpaced[0] = dataPoints[0];
+  evenlySpaced[evenlySpaced.length - 1] = dataPoints[dataPoints.length - 1];
   return evenlySpaced;
 }
 
