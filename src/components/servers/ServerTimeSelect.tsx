@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export type TimeOption = "1m" | "1h" | "6h" | "12h" | "24h" | "7d" | "30d" | "1y";
+export type TimeOption = "1m" | "5m" | "15m" | "30m"| "1h" | "6h" | "12h" | "24h" | "7d" | "30d" | "1y";
 
 interface ServerTimeSelectProps {
   value: TimeOption;
@@ -23,6 +23,9 @@ export default function ServerTimeSelect({ value, onValueChange }: ServerTimeSel
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="1m">1 Minute</SelectItem>
+        <SelectItem value="5m">5 Minutes</SelectItem>
+        <SelectItem value="15m">15 Minutes</SelectItem>
+        <SelectItem value="30m">30 Minutes</SelectItem>
         <SelectItem value="1h">1 Hour</SelectItem>
         <SelectItem value="6h">6 Hours</SelectItem>
         <SelectItem value="12h">12 Hours</SelectItem>
