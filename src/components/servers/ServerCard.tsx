@@ -17,6 +17,7 @@ function parseTimeRangeToMs(timeRange: string) {
   const value = Number.parseInt(timeRange, 10);
   if (!Number.isFinite(value) || value <= 0) return 24 * 60 * 60 * 1000;
 
+  if (timeRange.endsWith("m")) return value * 60 * 1000;
   if (timeRange.endsWith("h")) return value * 60 * 60 * 1000;
   if (timeRange.endsWith("d")) return value * 24 * 60 * 60 * 1000;
   if (timeRange.endsWith("y")) return value * 365 * 24 * 60 * 60 * 1000;
