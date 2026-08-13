@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from "react";
 
 type MessageHandler = (data: any) => void;
 
@@ -19,9 +19,9 @@ class WebSocketManager {
 
   private connect() {
     const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL;
-    
+
     if (!wsUrl) {
-      console.error('WebSocket url not defined in environment variables');
+      console.error("WebSocket url not defined in environment variables");
       return;
     }
 
@@ -33,7 +33,7 @@ class WebSocketManager {
     this.ws = ws;
 
     ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log("WebSocket connected");
       this.isConnected = true;
       this.notifyConnectionListeners();
     };
@@ -41,29 +41,28 @@ class WebSocketManager {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type) {
           const handlers = this.messageHandlers.get(data.type);
           if (handlers) {
-            handlers.forEach(handler => handler(data));
+            handlers.forEach((handler) => handler(data));
           }
         }
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        console.error("Error parsing WebSocket message:", error);
       }
     };
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error("WebSocket error:", error);
     };
 
     ws.onclose = () => {
-      console.log('WebSocket disconnected');
+      console.log("WebSocket disconnected");
       this.isConnected = false;
       this.notifyConnectionListeners();
 
       if (this.shouldReconnect) {
-        
         this.reconnectTimeout = setTimeout(() => {
           this.connect();
         }, this.RECONNECT_INTERVAL);
@@ -72,7 +71,7 @@ class WebSocketManager {
   }
 
   private notifyConnectionListeners() {
-    this.connectionListeners.forEach(listener => listener(this.isConnected));
+    this.connectionListeners.forEach((listener) => listener(this.isConnected));
   }
 
   public on(eventType: string, handler: MessageHandler) {
@@ -96,7 +95,7 @@ class WebSocketManager {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     } else {
-      console.warn('WebSocket is not connected');
+      console.warn("WebSocket is not connected");
     }
   }
 
@@ -113,11 +112,11 @@ class WebSocketManager {
 
   public disconnect() {
     this.shouldReconnect = false;
-    
+
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
     }
-    
+
     if (this.ws) {
       this.ws.close();
     }
@@ -135,24 +134,33 @@ const getWebSocketManager = () => {
 
 export function useWebSocket() {
   const manager = getWebSocketManager();
-  
+
   const isConnected = useSyncExternalStore(
     (callback) => manager.subscribeToConnection(callback),
     () => manager.getConnectionState(),
-    () => false
+    () => false,
   );
 
-  const on = useCallback((eventType: string, handler: MessageHandler) => {
-    manager.on(eventType, handler);
-  }, [manager]);
+  const on = useCallback(
+    (eventType: string, handler: MessageHandler) => {
+      manager.on(eventType, handler);
+    },
+    [manager],
+  );
 
-  const off = useCallback((eventType: string, handler: MessageHandler) => {
-    manager.off(eventType, handler);
-  }, [manager]);
+  const off = useCallback(
+    (eventType: string, handler: MessageHandler) => {
+      manager.off(eventType, handler);
+    },
+    [manager],
+  );
 
-  const send = useCallback((data: any) => {
-    manager.send(data);
-  }, [manager]);
+  const send = useCallback(
+    (data: any) => {
+      manager.send(data);
+    },
+    [manager],
+  );
 
   return { isConnected, on, off, send };
 }

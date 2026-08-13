@@ -186,11 +186,16 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
       }
 
       if (sequence <= subscriptionRef.current.lastSequence && sequence > 0) {
-        console.warn(`[${server.ip}] Out-of-order sequence: ${sequence} (expected > ${subscriptionRef.current.lastSequence})`);
+        console.warn(
+          `[${server.ip}] Out-of-order sequence: ${sequence} (expected > ${subscriptionRef.current.lastSequence})`,
+        );
         return;
       }
 
-      subscriptionRef.current.lastSequence = Math.max(subscriptionRef.current.lastSequence, sequence);
+      subscriptionRef.current.lastSequence = Math.max(
+        subscriptionRef.current.lastSequence,
+        sequence,
+      );
       if (eventId) {
         subscriptionRef.current.dedupeSet.add(eventId);
       }
@@ -255,8 +260,8 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     };
 
     updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
   }, [visible]);
 
   const sparklinePoints = dataPoints;
@@ -274,17 +279,13 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     const rawMin = Math.min(...sparklineValues);
     const rawMax = Math.max(...sparklineValues);
     const spread = rawMax - rawMin;
-    const dynamicPadding = spread === 0
-      ? Math.max(2, rawMax * 0.1)
-      : spread * 0.15;
+    const dynamicPadding = spread === 0 ? Math.max(2, rawMax * 0.1) : spread * 0.15;
     const padding = Math.max(dynamicPadding, 1);
     const min = Math.max(0, rawMin - padding);
     const max = rawMax + padding;
     const steps = 4;
     const interval = (max - min) / steps;
-    const ticks = Array.from({ length: steps + 1 }, (_, idx) =>
-      Math.round(max - interval * idx),
-    );
+    const ticks = Array.from({ length: steps + 1 }, (_, idx) => Math.round(max - interval * idx));
 
     return { yRange: { min, max }, yTicks: ticks };
   }, [sparklineValues]);
@@ -328,35 +329,38 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
     return ticks;
   }, [dataPoints, containerWidth]);
 
-  const formatTickLabel = useCallback((timestamp: number, isSmall: boolean) => {
-    if (!timestamp) return "--";
-    const date = new Date(timestamp);
+  const formatTickLabel = useCallback(
+    (timestamp: number, isSmall: boolean) => {
+      if (!timestamp) return "--";
+      const date = new Date(timestamp);
 
-    const rangeMs = parseTimeRangeToMs(timeRange);
-    const oneDay = 24 * 60 * 60 * 1000;
-    const oneMonth = 30 * oneDay;
+      const rangeMs = parseTimeRangeToMs(timeRange);
+      const oneDay = 24 * 60 * 60 * 1000;
+      const oneMonth = 30 * oneDay;
 
-    if (rangeMs <= oneDay && isSmall) {
+      if (rangeMs <= oneDay && isSmall) {
+        return date.toLocaleString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      if (rangeMs > oneMonth) {
+        return date.toLocaleString(undefined, {
+          month: "short",
+          day: "2-digit",
+        });
+      }
+
       return date.toLocaleString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
       });
-    }
-
-    if (rangeMs > oneMonth) {
-      return date.toLocaleString(undefined, {
-        month: "short",
-        day: "2-digit",
-      });
-    }
-
-    return date.toLocaleString(undefined, {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }, [timeRange]);
+    },
+    [timeRange],
+  );
 
   const iconSrc = server.icon ?? "/logo/no-icon.png";
 
@@ -377,7 +381,9 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
               />
             </div>
             <div className="min-w-0">
-              <CardTitle className="truncate text-base leading-tight">{server.name || server.ip}</CardTitle>
+              <CardTitle className="truncate text-base leading-tight">
+                {server.name || server.ip}
+              </CardTitle>
               <CardDescription className="truncate text-sm">{server.ip}</CardDescription>
             </div>
           </div>
@@ -427,9 +433,14 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
                 </div>
               </div>
 
-              <div ref={xAxisRef} className="ml-16 flex justify-between text-xs text-muted-foreground whitespace-nowrap overflow-hidden">
+              <div
+                ref={xAxisRef}
+                className="ml-16 flex justify-between text-xs text-muted-foreground whitespace-nowrap overflow-hidden"
+              >
                 {xTicks.map((tick, idx) => (
-                  <span key={`${idx}-${tick}`} className="shrink-0">{formatTickLabel(tick, containerWidth < 400)}</span>
+                  <span key={`${idx}-${tick}`} className="shrink-0">
+                    {formatTickLabel(tick, containerWidth < 400)}
+                  </span>
                 ))}
               </div>
             </div>
@@ -441,11 +452,15 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
         <div className="w-full grid grid-cols-3 sm:grid-cols-5 text-xs text-muted-foreground *:border-border *:border-r *:border-b [&>*:nth-child(3n)]:border-r-0 [&>*:last-child]:border-r-0 [&>*:nth-child(n+4)]:border-b-0 sm:*:border-r sm:[&>*:last-child]:border-r-0 sm:*:border-b-0">
           {["Current", "Mean", "Min", "Max", "Alltime"].map((label) => {
             const value =
-              label === "Current" ? stats.current :
-              label === "Mean" ? stats.avg :
-              label === "Min" ? stats.min :
-              label === "Alltime" ? stats.alltime :
-              stats.max;
+              label === "Current"
+                ? stats.current
+                : label === "Mean"
+                  ? stats.avg
+                  : label === "Min"
+                    ? stats.min
+                    : label === "Alltime"
+                      ? stats.alltime
+                      : stats.max;
             const dotColor =
               label === "Current"
                 ? "#00e13f"
@@ -457,17 +472,23 @@ function ServerCard({ server, timeRange, hidden = false, onToggleHidden }: Serve
                       ? "rgb(239,68,68)"
                       : label === "Alltime"
                         ? "rgb(168,85,247)"
-                        : "rgb(251,146,60)"
+                        : "rgb(251,146,60)";
             return (
               <div key={label} className="flex flex-col items-center gap-0.5 px-2 sm:px-4 py-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} aria-hidden />
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: dotColor }}
+                    aria-hidden
+                  />
                   <span>{label}</span>
                 </div>
                 {loading ? (
                   <Skeleton className="h-6 w-12" />
                 ) : (
-                  <span className="text-sm sm:text-base font-semibold text-foreground">{value.toLocaleString()}</span>
+                  <span className="text-sm sm:text-base font-semibold text-foreground">
+                    {value.toLocaleString()}
+                  </span>
                 )}
               </div>
             );

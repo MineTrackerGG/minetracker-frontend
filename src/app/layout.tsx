@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MineTracker – Minecraft Server Tracker",
-  description: "MineTracker is a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker.",
+  description:
+    "MineTracker is a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker.",
   keywords: [
     "minetracker",
     "minecraft",
@@ -37,17 +38,19 @@ export const metadata: Metadata = {
         url: "/logo/x256.png",
         width: 256,
         height: 256,
-        alt: "MineTracker Logo"
-      }
+        alt: "MineTracker Logo",
+      },
     ],
     title: "MineTracker – Minecraft Server Tracker",
-    description: "Welcome to MineTracker, a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker!",
+    description:
+      "Welcome to MineTracker, a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker!",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "MineTracker – Minecraft Server Tracker",
-    description: "MineTracker is a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker.",
+    description:
+      "MineTracker is a Minecraft server tracking application that provides real-time statistics and monitoring for Minecraft servers. Keep track of your favorite servers' status, player counts, and more with MineTracker.",
     images: ["/logo/x256.png"],
   },
   robots: {
@@ -63,11 +66,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
   );
 }

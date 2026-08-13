@@ -7,7 +7,7 @@ function clamp(value: number, min: number, max: number) {
 
 export function downsampleSparklineData(
   dataPoints: ServerDataPoint[],
-  maxPoints = 50
+  maxPoints = 50,
 ): ServerDataPoint[] {
   if (dataPoints.length <= 2 || maxPoints <= 2 || dataPoints.length <= maxPoints) {
     return dataPoints;
@@ -83,10 +83,7 @@ export function downsampleSparklineData(
   return evenlySpaced;
 }
 
-export function useSparklineData(
-  dataPoints: ServerDataPoint[],
-  maxPoints = 50
-) {
+export function useSparklineData(dataPoints: ServerDataPoint[], maxPoints = 50) {
   return useMemo((): ServerDataPoint[] => {
     if (dataPoints.length === 0) return [];
     return downsampleSparklineData(dataPoints, maxPoints);

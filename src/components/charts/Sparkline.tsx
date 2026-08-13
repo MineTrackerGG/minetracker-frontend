@@ -17,12 +17,7 @@ function getXAtIndex(timestamps: number[], index: number, width: number, total: 
   const span = (lastTs ?? 0) - (firstTs ?? 0);
   const ts = timestamps[index];
 
-  if (
-    Number.isFinite(firstTs) &&
-    Number.isFinite(lastTs) &&
-    Number.isFinite(ts) &&
-    span > 0
-  ) {
+  if (Number.isFinite(firstTs) && Number.isFinite(lastTs) && Number.isFinite(ts) && span > 0) {
     return ((ts - firstTs) / span) * width;
   }
 
@@ -41,15 +36,15 @@ function computeYBounds(values: number[], yRange?: { min: number; max: number })
 
 function getTrend(values: number[]) {
   const first = values[0];
-  const last  = values[values.length - 1];
+  const last = values[values.length - 1];
   if (last > first * 1.02) return "up";
   if (last < first * 0.98) return "down";
   return "flat";
 }
 
 const COLORS = {
-  up:   { stroke: "#00e13f",              fill: "rgba(0,225,63,0.15)"      },
-  down: { stroke: "rgb(59 130 246)",  fill: "rgba(59,130,246,0.15)"  },
+  up: { stroke: "#00e13f", fill: "rgba(0,225,63,0.15)" },
+  down: { stroke: "rgb(59 130 246)", fill: "rgba(59,130,246,0.15)" },
   flat: { stroke: "rgb(148 163 184)", fill: "rgba(148,163,184,0.12)" },
 };
 
@@ -60,20 +55,20 @@ export function Sparkline({
   yRange,
   isVisible = true,
 }: SparklineProps) {
-  const canvasRef      = useRef<HTMLCanvasElement | null>(null);
-  const baseImageRef   = useRef<ImageData | null>(null);
-  const rafRef         = useRef<number | null>(null);
-  const syncRafRef     = useRef<number | null>(null);
-  const isHoveringRef  = useRef(false);
-  const lastHoverRef   = useRef<{ index: number; rawX: number; rawY: number } | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const baseImageRef = useRef<ImageData | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const syncRafRef = useRef<number | null>(null);
+  const isHoveringRef = useRef(false);
+  const lastHoverRef = useRef<{ index: number; rawX: number; rawY: number } | null>(null);
   const lastSyncedTsRef = useRef<number | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(0);
-  const tooltipRef      = useRef<HTMLDivElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipValueRef = useRef<HTMLDivElement | null>(null);
-  const tooltipTimeRef  = useRef<HTMLDivElement | null>(null);
+  const tooltipTimeRef = useRef<HTMLDivElement | null>(null);
   const tooltipIndexRef = useRef<number>(-1);
   // Always-current snapshot of the sync handler — updated via useEffect, read in the stable subscription.
-  const syncHandlerRef  = useRef<(ts: number | null) => void>(() => {});
+  const syncHandlerRef = useRef<(ts: number | null) => void>(() => {});
 
   // Track canvas CSS width via ResizeObserver.
   useEffect(() => {
@@ -98,10 +93,10 @@ export function Sparkline({
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
-    const dpr   = window.devicePixelRatio || 1;
+    const dpr = window.devicePixelRatio || 1;
     const width = canvasWidth;
 
-    canvas.width  = width  * dpr;
+    canvas.width = width * dpr;
     canvas.height = height * dpr;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -126,10 +121,10 @@ export function Sparkline({
       const x = getXAtIndex(timestamps, i, width, values.length);
       const y = height - ((v - min) / range) * height;
       if (i === 0) ctx.moveTo(x, y);
-      else         ctx.lineTo(x, y);
+      else ctx.lineTo(x, y);
     });
     ctx.strokeStyle = color.stroke;
-    ctx.lineWidth   = 2;
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.lineTo(width, height);
@@ -139,7 +134,7 @@ export function Sparkline({
     ctx.fill();
 
     // Draw peak indicator.
-    const peakIndex = values.reduce((best, v, i) => v > values[best] ? i : best, 0);
+    const peakIndex = values.reduce((best, v, i) => (v > values[best] ? i : best), 0);
     const peakValue = values[peakIndex];
     const peakX = getXAtIndex(timestamps, peakIndex, width, values.length);
     const peakY = height - ((peakValue - min) / range) * height;
@@ -181,107 +176,114 @@ export function Sparkline({
   }, [values, timestamps, height, canvasWidth, yRange]);
 
   // Draw hover overlay directly on canvas AND update tooltip DOM — zero React renders.
-  const drawHoverDot = useCallback((index: number, rawX: number, rawY: number) => {
-    const canvas = canvasRef.current;
-    const base   = baseImageRef.current;
-    if (!canvas || !base || values.length < 2) return;
+  const drawHoverDot = useCallback(
+    (index: number, rawX: number, rawY: number) => {
+      const canvas = canvasRef.current;
+      const base = baseImageRef.current;
+      if (!canvas || !base || values.length < 2) return;
 
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
 
-    const dpr   = window.devicePixelRatio || 1;
-    const width = canvasWidth;
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvasWidth;
 
-    ctx.putImageData(base, 0, 0); // restore base pixels (cheap memcpy)
+      ctx.putImageData(base, 0, 0); // restore base pixels (cheap memcpy)
 
-    const { min, range } = computeYBounds(values, yRange);
-    const color = COLORS[getTrend(values)];
-    const snapX = getXAtIndex(timestamps, index, width, values.length);
-    const snapY = height - ((values[index] - min) / range) * height;
+      const { min, range } = computeYBounds(values, yRange);
+      const color = COLORS[getTrend(values)];
+      const snapX = getXAtIndex(timestamps, index, width, values.length);
+      const snapY = height - ((values[index] - min) / range) * height;
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Smooth vertical crosshair at raw mouse position.
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.15)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(rawX, 0);
-    ctx.lineTo(rawX, height);
-    ctx.stroke();
-    ctx.restore();
+      // Smooth vertical crosshair at raw mouse position.
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rawX, 0);
+      ctx.lineTo(rawX, height);
+      ctx.stroke();
+      ctx.restore();
 
-    // Dot at nearest data point.
-    ctx.beginPath();
-    ctx.arc(snapX, snapY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = color.stroke;
-    ctx.fill();
+      // Dot at nearest data point.
+      ctx.beginPath();
+      ctx.arc(snapX, snapY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color.stroke;
+      ctx.fill();
 
-    // Update tooltip position imperatively (no React state).
-    const tip = tooltipRef.current;
-    if (tip && isVisible) {
-      const left = rawX + 12 + TOOLTIP_W > width ? rawX - TOOLTIP_W - 4 : rawX + 12;
-      const top  = Math.max(rawY - 36, 4);
-      tip.style.left    = `${left}px`;
-      tip.style.top     = `${top}px`;
-      tip.style.display = "block";
-      // Only update text content when index changes.
-      if (tooltipIndexRef.current !== index) {
-        tooltipIndexRef.current = index;
-        if (tooltipValueRef.current)
-          tooltipValueRef.current.textContent = `${values[index].toLocaleString()} Players`;
-        if (tooltipTimeRef.current) {
-          const ts = timestamps[index];
-          tooltipTimeRef.current.textContent = typeof ts === "number"
-            ? new Date(ts * 1000).toLocaleString()
-            : "--";
+      // Update tooltip position imperatively (no React state).
+      const tip = tooltipRef.current;
+      if (tip && isVisible) {
+        const left = rawX + 12 + TOOLTIP_W > width ? rawX - TOOLTIP_W - 4 : rawX + 12;
+        const top = Math.max(rawY - 36, 4);
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+        tip.style.display = "block";
+        // Only update text content when index changes.
+        if (tooltipIndexRef.current !== index) {
+          tooltipIndexRef.current = index;
+          if (tooltipValueRef.current)
+            tooltipValueRef.current.textContent = `${values[index].toLocaleString()} Players`;
+          if (tooltipTimeRef.current) {
+            const ts = timestamps[index];
+            tooltipTimeRef.current.textContent =
+              typeof ts === "number" ? new Date(ts * 1000).toLocaleString() : "--";
+          }
         }
       }
-    }
-  }, [values, height, canvasWidth, yRange, isVisible, timestamps]);
+    },
+    [values, height, canvasWidth, yRange, isVisible, timestamps],
+  );
 
   const clearHoverDot = useCallback(() => {
     const canvas = canvasRef.current;
-    const base   = baseImageRef.current;
+    const base = baseImageRef.current;
     if (canvas && base) {
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (ctx) ctx.putImageData(base, 0, 0);
     }
     const tip = tooltipRef.current;
-    if (tip) { tip.style.display = "none"; }
+    if (tip) {
+      tip.style.display = "none";
+    }
     tooltipIndexRef.current = -1;
   }, []);
 
-  const onMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (values.length === 0) return;
-    isHoveringRef.current = true;
+  const onMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (values.length === 0) return;
+      isHoveringRef.current = true;
 
-    const rect  = e.currentTarget.getBoundingClientRect();
-    const x     = e.clientX - rect.left;
-    const y     = e.clientY - rect.top;
-    const width = rect.width;
-    let index = 0;
-    let bestDiff = Infinity;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const width = rect.width;
+      let index = 0;
+      let bestDiff = Infinity;
 
-    for (let i = 0; i < values.length; i++) {
-      const px = getXAtIndex(timestamps, i, width, values.length);
-      const diff = Math.abs(px - x);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        index = i;
+      for (let i = 0; i < values.length; i++) {
+        const px = getXAtIndex(timestamps, i, width, values.length);
+        const diff = Math.abs(px - x);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          index = i;
+        }
       }
-    }
 
-    lastHoverRef.current = { index, rawX: x, rawY: y };
+      lastHoverRef.current = { index, rawX: x, rawY: y };
 
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      drawHoverDot(index, x, y);
-      // Notify siblings via bus inside RAF — throttled to display rate.
-      if (isVisible) chartSync.notify(timestamps[index] ?? null);
-      rafRef.current = null;
-    });
-  }, [values, timestamps, isVisible, drawHoverDot]);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        drawHoverDot(index, x, y);
+        // Notify siblings via bus inside RAF — throttled to display rate.
+        if (isVisible) chartSync.notify(timestamps[index] ?? null);
+        rafRef.current = null;
+      });
+    },
+    [values, timestamps, isVisible, drawHoverDot],
+  );
 
   const onLeave = useCallback(() => {
     if (rafRef.current !== null) {
@@ -309,12 +311,19 @@ export function Sparkline({
   useEffect(() => {
     syncHandlerRef.current = (ts: number | null) => {
       if (!isVisible || !timestamps.length || canvasWidth === 0 || values.length < 2) return;
-      if (ts == null) { clearHoverDot(); return; }
+      if (ts == null) {
+        clearHoverDot();
+        return;
+      }
 
-      let bestIdx = 0, bestDiff = Infinity;
+      let bestIdx = 0,
+        bestDiff = Infinity;
       for (let i = 0; i < timestamps.length; i++) {
         const diff = Math.abs((timestamps[i] ?? 0) - ts);
-        if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestIdx = i;
+        }
       }
       const idx = Math.max(0, Math.min(values.length - 1, bestIdx));
       const { min, range } = computeYBounds(values, yRange);

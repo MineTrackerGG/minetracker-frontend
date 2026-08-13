@@ -94,7 +94,7 @@ export default function Home() {
       return applied ? next : prev;
     });
   }, []);
-  
+
   // set first servers on initial render using getServers from serverData.ts
   useEffect(() => {
     async function fetchInitialServers() {
@@ -228,131 +228,145 @@ export default function Home() {
       {!isConnected && <LoadingScreen message="Connecting to backend..." />}
       {!servers.length && isConnected && <LoadingScreen message="Loading server data..." />}
 
-        <>
-          <div className="mb-6">
-            <ServerHeader
-              servers={servers.filter((s) => !hiddenMap[s.ip]).length}
-              totalPlayers={globalPlayercount}
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
-                Frontend version: <span className="font-mono text-foreground">{toShortHash(frontendCommitHash)}</span>
-              </span>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
-                Backend version: <span className="font-mono text-foreground">{toShortHash(backendCommitHash)}</span>
-              </span>
-              <a
-                href="https://github.com/MineTrackerGG"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-foreground transition-colors hover:bg-white/10"
-                aria-label="MineTrackerGG GitHub"
+      <>
+        <div className="mb-6">
+          <ServerHeader
+            servers={servers.filter((s) => !hiddenMap[s.ip]).length}
+            totalPlayers={globalPlayercount}
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
+              Frontend version:{" "}
+              <span className="font-mono text-foreground">{toShortHash(frontendCommitHash)}</span>
+            </span>
+            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1">
+              Backend version:{" "}
+              <span className="font-mono text-foreground">{toShortHash(backendCommitHash)}</span>
+            </span>
+            <a
+              href="https://github.com/MineTrackerGG"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-foreground transition-colors hover:bg-white/10"
+              aria-label="MineTrackerGG GitHub"
+            >
+              <GitBranch className="size-3.5" />
+              GitHub
+            </a>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
+            <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
+            <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />
+            <div className="ml-2 flex gap-2 relative" ref={manageRef}>
+              <button
+                type="button"
+                className="rounded px-3 py-1 text-sm bg-white/5"
+                onClick={() => {
+                  const map: Record<string, boolean> = {};
+                  servers.forEach((s) => (map[s.ip] = true));
+                  setHiddenMap(map);
+                }}
               >
-                <GitBranch className="size-3.5" />
-                GitHub
-              </a>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-3 rounded-2xl bg-white/5 p-3">
-              <ServerTimeSelect value={timeRange} onValueChange={setTimeRange} />
-              <ServerSortingSelect value={sortOption} onValueChange={setSortOption} />
-              <div className="ml-2 flex gap-2 relative" ref={manageRef}>
-                <button
-                  type="button"
-                  className="rounded px-3 py-1 text-sm bg-white/5"
-                  onClick={() => {
-                    const map: Record<string, boolean> = {};
-                    servers.forEach((s) => (map[s.ip] = true));
-                    setHiddenMap(map);
-                  }}
-                >
-                  Hide All
-                </button>
-                <button
-                  type="button"
-                  className="rounded px-3 py-1 text-sm bg-white/5"
-                  onClick={() => setHiddenMap({})}
-                >
-                  Show All
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-white/10 px-3 py-1 text-sm bg-white/5 hover:bg-white/7 inline-flex items-center gap-2"
-                  onClick={() => setManageOpen((v) => !v)}
-                  aria-expanded={manageOpen}
-                  aria-controls="manage-dropdown"
-                >
-                  <Search className="size-4 opacity-70" />
-                  Manage
-                </button>
+                Hide All
+              </button>
+              <button
+                type="button"
+                className="rounded px-3 py-1 text-sm bg-white/5"
+                onClick={() => setHiddenMap({})}
+              >
+                Show All
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-white/10 px-3 py-1 text-sm bg-white/5 hover:bg-white/7 inline-flex items-center gap-2"
+                onClick={() => setManageOpen((v) => !v)}
+                aria-expanded={manageOpen}
+                aria-controls="manage-dropdown"
+              >
+                <Search className="size-4 opacity-70" />
+                Manage
+              </button>
 
-                {manageOpen && (
-                  <div id="manage-dropdown" className="absolute right-0 mt-2 w-72 max-h-80 overflow-auto no-scrollbar rounded-md border bg-popover p-3 shadow-lg z-50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="relative flex-1">
-                        <input
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          placeholder="Search servers"
-                          className="w-full rounded border border-white/6 px-8 py-1 text-sm bg-transparent placeholder:text-muted-foreground"
-                        />
-                        <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-70">
-                          <Search className="size-4" />
-                        </div>
+              {manageOpen && (
+                <div
+                  id="manage-dropdown"
+                  className="absolute right-0 mt-2 w-72 max-h-80 overflow-auto no-scrollbar rounded-md border bg-popover p-3 shadow-lg z-50"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="relative flex-1">
+                      <input
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search servers"
+                        className="w-full rounded border border-white/6 px-8 py-1 text-sm bg-transparent placeholder:text-muted-foreground"
+                      />
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2 opacity-70">
+                        <Search className="size-4" />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setManageOpen(false)}
-                        aria-label="Close"
-                        className="rounded-md p-1 hover:bg-white/6"
-                      >
-                        <X className="size-4" />
-                      </button>
                     </div>
-                    <div className="space-y-1">
-                      {sortedServers
-                        .filter((s) =>
-                          `${s.name || s.ip} ${s.ip}`.toLowerCase().includes(searchTerm.toLowerCase()),
-                        )
-                        .map((s) => (
-                          <label key={s.ip} className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-accent">
-                            <div className="truncate text-sm">{s.name || s.ip}</div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setHiddenMap((prev) => ({ ...prev, [s.ip]: !prev[s.ip] }))}
-                                className="rounded-md border border-white/8 px-2 py-0.5 text-xs bg-transparent hover:bg-white/6 inline-flex items-center gap-2"
-                                aria-pressed={Boolean(hiddenMap[s.ip])}
-                              >
-                                {hiddenMap[s.ip] ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                <span className="sr-only">{hiddenMap[s.ip] ? 'Show' : 'Hide'}</span>
-                              </button>
-                            </div>
-                          </label>
-                        ))}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setManageOpen(false)}
+                      aria-label="Close"
+                      className="rounded-md p-1 hover:bg-white/6"
+                    >
+                      <X className="size-4" />
+                    </button>
                   </div>
-                )}
-              </div>
+                  <div className="space-y-1">
+                    {sortedServers
+                      .filter((s) =>
+                        `${s.name || s.ip} ${s.ip}`
+                          .toLowerCase()
+                          .includes(searchTerm.toLowerCase()),
+                      )
+                      .map((s) => (
+                        <label
+                          key={s.ip}
+                          className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-accent"
+                        >
+                          <div className="truncate text-sm">{s.name || s.ip}</div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setHiddenMap((prev) => ({ ...prev, [s.ip]: !prev[s.ip] }))
+                              }
+                              className="rounded-md border border-white/8 px-2 py-0.5 text-xs bg-transparent hover:bg-white/6 inline-flex items-center gap-2"
+                              aria-pressed={Boolean(hiddenMap[s.ip])}
+                            >
+                              {hiddenMap[s.ip] ? (
+                                <EyeOff className="size-4" />
+                              ) : (
+                                <Eye className="size-4" />
+                              )}
+                              <span className="sr-only">{hiddenMap[s.ip] ? "Show" : "Hide"}</span>
+                            </button>
+                          </div>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {sortedServers
-              .filter((s) => !hiddenMap[s.ip])
-              .map((server, idx) => (
-                <ServerCard
-                  server={server}
-                  key={server.ip}
-                  position={idx + 1}
-                  timeRange={timeRange}
-                  hidden={Boolean(hiddenMap[server.ip])}
-                  onToggleHidden={(ip) =>
-                    setHiddenMap((prev) => ({ ...prev, [ip]: !prev[ip] }))
-                  }
-                />
-              ))}
-          </div>
-        </>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {sortedServers
+            .filter((s) => !hiddenMap[s.ip])
+            .map((server, idx) => (
+              <ServerCard
+                server={server}
+                key={server.ip}
+                position={idx + 1}
+                timeRange={timeRange}
+                hidden={Boolean(hiddenMap[server.ip])}
+                onToggleHidden={(ip) => setHiddenMap((prev) => ({ ...prev, [ip]: !prev[ip] }))}
+              />
+            ))}
+        </div>
+      </>
     </div>
   );
 }

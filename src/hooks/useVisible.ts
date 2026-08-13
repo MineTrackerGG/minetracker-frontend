@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export function useVisible<T extends HTMLElement>(
-  options?: IntersectionObserverInit
-) {
+export function useVisible<T extends HTMLElement>(options?: IntersectionObserverInit) {
   const ref = useRef<T | null>(null);
   const [visible, setVisible] = useState(false);
 
@@ -20,7 +18,7 @@ export function useVisible<T extends HTMLElement>(
         rootMargin: "200px",
         threshold: 0.01,
         ...options,
-      }
+      },
     );
 
     observer.observe(ref.current);
