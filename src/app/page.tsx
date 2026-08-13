@@ -10,7 +10,7 @@ import { parseLiveDataPayload, type LiveDataPoint } from "@/lib/liveData";
 import { getServers } from "@/lib/serverData";
 import { Server } from "@/types/server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Github, Search, X } from "lucide-react";
+import { Eye, EyeOff, GitBranch, Search, X } from "lucide-react";
 
 type FrontendVersionResponse = {
   commitHash?: string;
@@ -248,7 +248,7 @@ export default function Home() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-foreground transition-colors hover:bg-white/10"
                 aria-label="MineTrackerGG GitHub"
               >
-                <Github className="size-3.5" />
+                <GitBranch className="size-3.5" />
                 GitHub
               </a>
             </div>
